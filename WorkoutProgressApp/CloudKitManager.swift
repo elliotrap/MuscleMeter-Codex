@@ -119,7 +119,6 @@ extension CloudKitManager {
         for workoutID: CKRecord.ID,
         completion: @escaping (Result<[CKRecord], Error>) -> Void
     ) {
-        // Create a predicate filtering on the workout reference.
         let workoutReference = CKRecord.Reference(recordID: workoutID, action: .none)
         let predicate = NSPredicate(format: "workoutRef == %@", workoutReference)
         let query = CKQuery(recordType: "UserExercises", predicate: predicate)

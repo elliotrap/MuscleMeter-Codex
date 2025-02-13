@@ -18,7 +18,8 @@ struct WorkoutModel: Identifiable {
 class WorkoutViewModel: ObservableObject {
     @Published var workouts: [WorkoutModel] = []
     
-    private let database = CKContainer.default().publicCloudDatabase
+    // Use the private database (recommended so data isn’t public)
+    private let database = CKContainer.default().privateCloudDatabase
     
     func fetchWorkouts() {
         let query = CKQuery(recordType: "UserWorkout", predicate: NSPredicate(value: true))
@@ -46,18 +47,21 @@ class WorkoutViewModel: ObservableObject {
         }
     }
     
-    func addWorkout(named: String) {
+    func addWorkout(named: String, completion: @escaping (WorkoutModel?) -> Void) {
         let record = CKRecord(recordType: "UserWorkout")
         record["name"] = named as CKRecordValue
-        // Optional date
         record["date"] = Date() as CKRecordValue
         
         database.save(record) { savedRecord, error in
             if let error = error {
                 print("Error saving workout:", error)
+                completion(nil)
                 return
             }
-            guard let savedRecord = savedRecord else { return }
+            guard let savedRecord = savedRecord else {
+                completion(nil)
+                return
+            }
             
             let newWorkout = WorkoutModel(
                 id: savedRecord.recordID,
@@ -67,6 +71,33 @@ class WorkoutViewModel: ObservableObject {
             print("Successfully saved workout: \(named) with record ID: \(savedRecord.recordID).")
             DispatchQueue.main.async {
                 self.workouts.insert(newWorkout, at: 0)
+                completion(newWorkout)
+            }
+        }
+    }
+    
+    func updateWorkout(workout: WorkoutModel, newName: String) {
+        database.fetch(withRecordID: workout.id) { record, error in
+            if let error = error {
+                print("Error fetching workout record for update: \(error.localizedDescription)")
+                return
+            }
+            guard let record = record else { return }
+            
+            record["name"] = newName as CKRecordValue
+            self.database.save(record) { savedRecord, error in
+                if let error = error {
+                    print("Error updating workout record: \(error.localizedDescription)")
+                    return
+                }
+                if savedRecord != nil {
+                    print("Successfully updated workout record with new name: \(newName)")
+                    DispatchQueue.main.async {
+                        if let index = self.workouts.firstIndex(where: { $0.id == workout.id }) {
+                            self.workouts[index].name = newName
+                        }
+                    }
+                }
             }
         }
     }

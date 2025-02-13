@@ -6,45 +6,47 @@
 //
 
 import SwiftUI
-
 import CloudKit
 
 struct ExercisesView: View {
-    // Instead of creating the view model without parameters,
-    // we require a workoutID. For example, you could pass in a real CKRecord.ID,
-    // or for testing you could use a dummy value.
     @ObservedObject var viewModel: ExerciseViewModel
-    
     @State private var showAddExercise = false
 
-    // Provide an initializer that accepts a workoutID.
     init(workoutID: CKRecord.ID) {
-        // Initialize the view model with the workoutID.
         self.viewModel = ExerciseViewModel(workoutID: workoutID)
     }
     
     var body: some View {
+
         NavigationView {
-            mainContent
-                .navigationTitle("Your Exercises")
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button(action: { showAddExercise = true }) {
-                            Image(systemName: "plus")
+            ZStack {
+                // Background gradient.
+                LinearGradient(
+                    gradient: Gradient(colors: [Color("NeomorphBG2"), Color("NeomorphBG2")]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+                
+                mainContent
+                    .navigationTitle("Your Exercises")
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button(action: { showAddExercise = true }) {
+                                Image(systemName: "plus")
+                            }
                         }
                     }
-                }
-                .onAppear {
-                    // Fetch existing exercises from CloudKit
-                    viewModel.fetchExercises()
-                }
-                .sheet(isPresented: $showAddExercise) {
-                    AddExerciseView(viewModel: viewModel)
-                }
+                    .onAppear {
+                        viewModel.fetchExercises()
+                    }
+                    .sheet(isPresented: $showAddExercise) {
+                        AddExerciseView(viewModel: viewModel)
+                    }
+            }
         }
-    }
+        }
     
-    // MARK: - Main Content
     private var mainContent: some View {
         VStack {
             if viewModel.exercises.isEmpty {
@@ -55,29 +57,24 @@ struct ExercisesView: View {
         }
     }
     
-    // MARK: - "No Exercises" View
     private var noExercisesView: some View {
         Text("No exercises added yet.")
             .foregroundColor(.secondary)
             .padding()
     }
     
-    // MARK: - Exercises List / ScrollView
     private var exercisesListView: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Explicitly specify the id so that SwiftUI can identify each exercise.
                 ForEach(viewModel.exercises, id: \.id) { exercise in
                     ExerciseCardView(
-                        liftName: exercise.name,    // Pass the plain String value.
-                        sets: exercise.sets,         // Pass the plain Int value.
-                        reps: exercise.reps,         // Pass the plain Int value.
-                        weight: exercise.weight,     // Pass the plain Double value.
-                        subLevelProgress: {
-                            // Example sub-level progress:
-                            (ExperienceLevel.noob, ExperienceLevel.intermediate, 0.3)
-                        },
-                        liftLevel: .noob
+                        liftName: exercise.name,
+                        reps: exercise.reps,
+                        liftLevel: .noob,
+                        setWeights: exercise.setWeights,
+                        setCompletions: exercise.setCompletions,
+                        setNotes: exercise.setNotes,
+                        subLevelProgress: { (ExperienceLevel.noob, ExperienceLevel.intermediate, 0.3) }
                     )
                     .padding(.horizontal)
                 }
@@ -97,19 +94,18 @@ struct AddExerciseView: View {
     @State private var exerciseName = ""
     @State private var setsText = ""
     @State private var repsText = ""
-    @State private var weightText = ""
 
     var body: some View {
         NavigationView {
             Form {
                 Section(header: Text("Exercise Details")) {
                     TextField("Exercise name", text: $exerciseName)
+                    
                     TextField("Sets", text: $setsText)
                         .keyboardType(.numberPad)
+                    
                     TextField("Reps", text: $repsText)
                         .keyboardType(.numberPad)
-                    TextField("Weight (lbs)", text: $weightText)
-                        .keyboardType(.decimalPad)
                 }
             }
             .navigationTitle("Add Exercise")
@@ -124,11 +120,21 @@ struct AddExerciseView: View {
                         guard
                             !exerciseName.isEmpty,
                             let sets = Int(setsText),
-                            let reps = Int(repsText),
-                            let weight = Double(weightText)
+                            let reps = Int(repsText)
                         else { return }
                         
-                        viewModel.addExercise(name: exerciseName, sets: sets, reps: reps, weight: weight)
+                        // Build arrays for each set
+                        let setWeights = Array(repeating: 0.0, count: sets)      // All 0.0 by default
+                        let setCompletions = Array(repeating: false, count: sets) // All false by default
+                        
+                        viewModel.addExercise(
+                            name: exerciseName,
+                            sets: sets,
+                            reps: reps,
+                            setWeights: setWeights,
+                            setCompletions: setCompletions
+                        )
+                        
                         dismiss()
                     }
                 }
@@ -136,90 +142,153 @@ struct AddExerciseView: View {
         }
     }
 }
-
 struct ExerciseCardView: View {
-    // If you still need an internal ViewModel:
-    @ObservedObject var vm = ViewModel()
-
-    // MARK: - Inputs
-    let liftName: String   // e.g. "Bench", "Squat", "Deadlift"
-    let sets: Int
+    // 1. Basic inputs
+    let liftName: String
     let reps: Int
-    let weight: Double
-    
-    /// A function returning `(currentLevel, nextLevel, fraction)`
-    /// to color the background of the card
-    let subLevelProgress: () -> (ExperienceLevel, ExperienceLevel?, Double)
-    
-    /// Overall classification for the lift (e.g. vm.benchLevel)
     let liftLevel: ExperienceLevel
     
-    // MARK: - Layout Customization
+    // 2. Arrays for sets
+    @State var setWeights: [Double]
+    @State var setCompletions: [Bool]
+    @State var setNotes: [String]
+    
+    // 3. Progress
+    let subLevelProgress: () -> (ExperienceLevel, ExperienceLevel?, Double)
+    
+    // 4. Observed object
+    @ObservedObject var vm = ViewModel()
+    
+    // 5. Layout
     var rectangleProgress: CGFloat = 0.05
     var cornerRadius: CGFloat = 15
     var cardWidth: CGFloat = 336
-    var cardHeight: CGFloat = 120
     
-    // MARK: - Body
+    // 6. NEW: Add states for note editing
+    @State private var editingSetIndex: Int? = nil
+    @State private var showNoteEditor = false
+    
     var body: some View {
         let (currentLevel, _, fraction) = subLevelProgress()
+        let dynamicHeight = 120.0 + Double(setWeights.count) * 40.0
         
-        ZStack {
-            // 1) Custom background tinted by fraction & currentLevel
-            CustomRoundedRectangle(
+        ZStack(alignment: .center) {
+            ExerciseCustomRoundedRectangle(
                 progressFraction: CGFloat(fraction),
                 progress: rectangleProgress,
                 currentLevel: currentLevel,
                 cornerRadius: cornerRadius,
                 width: cardWidth,
-                height: cardHeight
+                height: dynamicHeight
             )
             
-            // 2) Inner content
-            VStack(alignment: .leading, spacing: 8) {
-                // Lift/Exercise Name
+            VStack(alignment: .center, spacing: 16) {
                 Text(liftName)
                     .font(.title3)
                     .bold()
                     .foregroundColor(.white)
                 
-                // Sets, Reps, and Weight
-                HStack(spacing: 16) {
-                    VStack {
-                        Text("Sets")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.8))
-                        Text("\(sets)")
-                            .font(.headline)
+                Text("Reps per set: \(reps)")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.8))
+                
+                ForEach(setWeights.indices, id: \.self) { index in
+                    HStack {
+                        // Toggle for set completion
+                        Button(action: {
+                            setCompletions[index].toggle()
+                        }) {
+                            Image(systemName: setCompletions[index]
+                                  ? "checkmark.circle.fill"
+                                  : "circle")
+                            .foregroundColor(setCompletions[index] ? .green : .white)
+                        }
+                        
+                        // Weight text field
+                        TextField("Weight", value: $setWeights[index], format: .number)
+                            .keyboardType(.decimalPad)
                             .foregroundColor(.white)
-                    }
-                    VStack {
-                        Text("Reps")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.8))
-                        Text("\(reps)")
-                            .font(.headline)
+                            .frame(width: 60)
+                            .toolbar {
+                                ToolbarItemGroup(placement: .keyboard) {
+                                    Spacer()
+                                    Button("Done") {
+                                        hideKeyboard()
+                                    }
+                                }
+                            }
+                        
+                        Text("lbs")
                             .foregroundColor(.white)
-                    }
-                    VStack {
-                        Text("Weight")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.8))
-                        Text("\(weight, specifier: "%.0f") lbs")
-                            .font(.headline)
-                            .foregroundColor(.white)
+                        
+                        Spacer()
+                        
+                        // NOTE Button: indicates whether there's a note
+                        Button(action: {
+                            editingSetIndex = index
+                            showNoteEditor = true
+                        }) {
+                            Image(systemName: setNotes[index].isEmpty ? "square.and.pencil" : "note.text")
+                                .foregroundColor(setNotes[index].isEmpty ? .white : .yellow)
+                        }
                     }
                 }
-                
-                // Classification
-                Text("\(liftName) Level: \(liftLevel.rawValue)")
-                    .font(.footnote)
-                    .foregroundColor(.white.opacity(0.9))
             }
             .padding()
         }
-        // If you want a fixed size, you can also add
-        // .frame(width: cardWidth, height: cardHeight)
-        // But the background shape is already sized in CustomRoundedRectangle.
+        .frame(width: cardWidth, height: dynamicHeight)
+        
+        // Sheet for editing a note
+        .sheet(isPresented: $showNoteEditor) {
+            if let idx = editingSetIndex {
+                NoteEditorView(
+                    note: $setNotes[idx],
+                    onSave: {
+                        // Optionally update CloudKit or do something with setNotes[idx]
+                    }
+                )
+            }
+        }
     }
+}
+extension View {
+    func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                        to: nil, from: nil, for: nil)
+    }
+}
+
+struct NoteEditorView: View {
+    @Binding var note: String
+    var onSave: () -> Void
+    
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Set Note")) {
+                    TextEditor(text: $note)
+                        .frame(height: 200)
+                }
+            }
+            .navigationTitle("Edit Note")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        onSave()
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+#Preview {
+    ExercisesView(workoutID: CKRecord.ID(recordName: "DummyWorkoutID"))
 }
