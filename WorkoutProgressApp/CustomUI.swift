@@ -311,3 +311,53 @@ struct ExerciseCustomRoundedRectangle: View {
         }
     }
 }
+
+struct WorkoutCustomRoundedRectangle: View {
+    /// The fraction [0..1] controlling how much of the rectangle is tinted vs. lighter.
+    var progress: CGFloat = 0.2
+    
+    /// The user-selected color for accenting this rectangle.
+    var accentColor: Color = .blue
+    
+    var cornerRadius: CGFloat = 10
+    var width: CGFloat = 366
+    var height: CGFloat = 130
+    
+    var body: some View {
+        ZStack {
+            // Outline shape
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(lineWidth: 5)
+                .foregroundColor(Color("NeomorphBG4").opacity(0.7))
+                .frame(width: 380, height: 129)
+            
+            // Glow behind the rectangle (optional)
+            VStack {
+                Spacer().frame(height: 120)
+                RoundedRectangle(cornerRadius: 50)
+                    .fill(accentColor.opacity(0.65))
+                    .frame(width: 390, height: 20)
+                    .blur(radius: 30)
+            }
+            
+            // Main accent rectangle
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(stops: [
+                            // 0..progress: accent color
+                            .init(color: accentColor,              location: 0.0),
+                            .init(color: accentColor.opacity(0.3), location: progress),
+                            
+                            // progress..1: “NeomorphBG3” to lighten the top portion
+                            .init(color: Color("NeomorphBG3").opacity(0.6), location: progress),
+                            .init(color: Color("NeomorphBG3").opacity(0.3), location: 1.0)
+                        ]),
+                        startPoint: .bottom,
+                        endPoint: .top
+                    )
+                )
+                .frame(width: width, height: 116)
+        }
+    }
+}
