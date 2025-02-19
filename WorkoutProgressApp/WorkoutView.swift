@@ -11,70 +11,101 @@ struct WorkoutsListView: View {
     @StateObject private var workoutViewModel = WorkoutViewModel()
     @State private var showAddWorkoutSheet = false
     
-    // MARK: - Body
+    // For color picker
+    @State private var showColorPicker = false
+    @State private var selectedAccentColor: Color = .blue
+    @State private var selectedWorkout: WorkoutModel? = nil
     
     var body: some View {
         NavigationView {
-            ZStack {
-                backgroundGradient
-                mainContent
-            }
-            .navigationTitle("Workouts")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    addWorkoutButton
+            listView
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color("NeomorphBG2"), Color("NeomorphBG2")]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .ignoresSafeArea()
+                )
+                .navigationTitle("Workouts")
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        addWorkoutButton
+                    }
                 }
-            }
-            .onAppear {
-                onAppearActions()
-            }
-            .sheet(isPresented: $showAddWorkoutSheet) {
-                AddWorkoutView(workoutViewModel: workoutViewModel)
-            }
+                .onAppear {
+                    onAppearActions()
+                }
+                // 1) Add Workout sheet (unchanged)
+                .sheet(isPresented: $showAddWorkoutSheet) {
+                    AddWorkoutView(workoutViewModel: workoutViewModel)
+                }
+                // 2) Color picker sheet
+                .sheet(isPresented: $showColorPicker) {
+                    colorPickerSheet
+                }
         }
     }
     
-    // MARK: - Subviews / Computed Properties
+    // MARK: - The List
     
-    /// The background gradient that covers the entire screen.
-    private var backgroundGradient: some View {
-        LinearGradient(
-            gradient: Gradient(colors: [Color("NeomorphBG2"), Color("NeomorphBG2")]),
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
-    }
-    
-    /// The main content (the List) on top of the gradient.
-    private var mainContent: some View {
-        listView
-            .listStyle(.plain)
-            .background(Color.clear)
-            .scrollContentBackground(.hidden) // iOS 16+ to hide default background
-    }
-    
-    /// The grouped list of workouts.
     private var listView: some View {
         List {
             ForEach(groupedWorkouts, id: \.key) { group in
                 Section(header: Text(group.key)) {
                     ForEach(group.value) { workout in
-                        WorkoutCardRow(workout: workout, workoutViewModel: workoutViewModel)
-                            .listRowBackground(Color.clear)
+                        // Pass a closure to trigger the color picker
+                        WorkoutCardView(
+                            workout: workout,
+                            workoutViewModel: workoutViewModel,
+                            onColorPickerRequested: {
+                                // This closure is called when the user taps the “edit color” button in the card.
+                                selectedWorkout = workout
+                                selectedAccentColor = .blue // or load from workout if you store color
+                                showColorPicker = true
+                            }
+                        )
                     }
+                    .listRowBackground(Color.clear)
                 }
             }
         }
     }
     
-    /// A computed property that groups workouts by their sectionTitle, sorted by key.
+    // MARK: - Color Picker Sheet
+    
+    private var colorPickerSheet: some View {
+        VStack(spacing: 20) {
+            Text("Choose a Color")
+                .font(.headline)
+            
+            ColorPicker("Accent Color", selection: $selectedAccentColor, supportsOpacity: false)
+                .padding()
+            
+            Button("Done") {
+                // If you want to store the color in CloudKit or your model, do it here:
+                if let workout = selectedWorkout {
+                    // e.g. workoutViewModel.updateWorkoutColor(workout, color: selectedAccentColor)
+                    // or store it in some property if you keep color locally
+                }
+                showColorPicker = false
+            }
+            .padding()
+            
+            Spacer()
+        }
+        .padding()
+    }
+    
+    // MARK: - Computed Properties & Methods
+    
     private var groupedWorkouts: [(key: String, value: [WorkoutModel])] {
         let groups = Dictionary(grouping: workoutViewModel.workouts, by: { $0.sectionTitle ?? "Other" })
         return groups.sorted { $0.key < $1.key }
     }
     
-    /// The "Add Workout" toolbar button.
     private var addWorkoutButton: some View {
         Button {
             showAddWorkoutSheet = true
@@ -83,11 +114,8 @@ struct WorkoutsListView: View {
         }
     }
     
-    /// Actions to perform when the view appears.
     private func onAppearActions() {
         workoutViewModel.fetchWorkouts()
-        
-        // Insert dummy data if no workouts are fetched.
         if workoutViewModel.workouts.isEmpty {
             let dummy1 = WorkoutModel(
                 id: CKRecord.ID(recordName: "Dummy1"),
@@ -255,212 +283,111 @@ struct WorkoutCardView: View {
     @State private var isEditing = false
     @State private var editedWorkoutName: String = ""
     
-    // For color picking
-    @State private var showColorPicker = false
-    @State private var accentColor: Color = .blue  // Default color if none is chosen
+    // For programmatic navigation
+    @State private var navigate = false
     
-    // Layout customization
-    var cardWidth: CGFloat = 336
-    var cardHeight: CGFloat = 120
-    var cornerRadius: CGFloat = 15
+    // This closure is called when the user wants to pick a color
+    var onColorPickerRequested: () -> Void = {                 print("onColorPickerRequested called")
+}
     
     var body: some View {
-        ZStack {
-            // 1) Background shape with user-chosen accent color
-            WorkoutCustomRoundedRectangle(
-                progress: 0.05,
-                accentColor: accentColor,
-                cornerRadius: cornerRadius,
-                width: cardWidth,
-                height: cardHeight
-            )
+        ZStack(alignment: .topTrailing) {
+            // 1) Card background + tap gesture
+            cardBackground
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    // Only navigate if not editing
+                    if !isEditing {
+                        navigate = true
+                    }
+                }
             
-            // 2) Workout info
+            // 2) Ellipsis button (toggle editing)
+            if !isEditing {
+                Button {
+                    isEditing = true
+                    editedWorkoutName = workout.name
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .foregroundColor(.black)
+                        .padding(8)
+                        .background(Color.white.opacity(0.3))
+                        .clipShape(Circle())
+                }
+                .padding([.top, .trailing], 8)
+                .zIndex(1)
+                .buttonStyle(.plain)
+            }
+            
+            // 3) Hidden NavigationLink
+            NavigationLink(
+                destination: ExercisesView(workoutID: workout.id),
+                isActive: $navigate
+            ) {
+                EmptyView()
+            }
+            .hidden()
+        }
+        .frame(width: 336, height: 120)
+    }
+    
+    // MARK: - Card Background
+    private var cardBackground: some View {
+        // For simplicity, just pick a color or store in the model
+        WorkoutCustomRoundedRectangle(
+            progress: 0.05,
+            accentColor: .blue,
+            cornerRadius: 15,
+            width: 336,
+            height: 120
+        )
+        .overlay(
             VStack(alignment: .leading, spacing: 8) {
                 if isEditing {
-                    // Editable text field
+                    // Pencil button to request color picker from the parent
+                    Button {
+                        onColorPickerRequested() // or showColorPicker = true
+                        print("Pencil button tapped!")
+                    } label: {
+                        Image(systemName: "pencil")
+                            .foregroundColor(.black)
+                            .padding(8)
+                            .background(Color.white.opacity(0.3))
+                            .clipShape(Circle())
+                            // Make the tap area a bit bigger:
+                            .frame(width: 44, height: 44)
+                    }
+                    .zIndex(2)  // So it sits above the card
+                    .buttonStyle(.plain) // Prevent SwiftUI from inflating the tap area in weird ways
+                    // EDITING MODE: text field, color picker button, etc.
                     TextField("Workout Name", text: $editedWorkoutName, onCommit: {
                         workoutViewModel.updateWorkout(workout: workout, newName: editedWorkoutName)
                         workout.name = editedWorkoutName
                         isEditing = false
                     })
                     .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding(.top, 8)
-                    .frame(width: 250)
+                    .frame(width: 200)
+                    
+                    
                 } else {
+                    // NORMAL MODE: show the name & date
                     Text(workout.name)
                         .font(.title3)
                         .bold()
                         .foregroundColor(.white)
-                }
-                
-                if let date = workout.date {
-                    Text("Date: \(date, formatter: DateFormatter.workoutDateFormatter)")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.8))
-                }
-            }
-            .padding()
-            
-            // 3) Ellipsis button pinned to top-right
-            HStack {
-                Spacer().frame(width: 250)
-                VStack {
-                    Button(action: {
-                        // Show the color picker sheet
-                        showColorPicker.toggle()
-                    }) {
-                        Image(systemName: "ellipsis")
-                            .foregroundColor(.black)
-                            .padding(8)
-                            .background(Color.white.opacity(0.3))
-                            .clipShape(Circle())
-                    }
-                    Spacer()
-                }
-            }
-            .padding()
-        }
-        .frame(width: cardWidth, height: cardHeight)
-        .sheet(isPresented: $showColorPicker) {
-            colorPickerSheet
-        }
-    }
-    
-    // MARK: - Color Picker Sheet
-    private var colorPickerSheet: some View {
-        VStack(spacing: 20) {
-            Text("Choose a Color")
-                .font(.headline)
-            
-            ColorPicker("Accent Color", selection: $accentColor, supportsOpacity: false)
-                .padding()
-            
-            Button("Save") {
-                // If you want to persist this color in your WorkoutModel or CloudKit,
-                // you would call an update function here, e.g.:
-                // workoutViewModel.updateWorkoutColor(workout, color: accentColor)
-                
-                showColorPicker = false
-            }
-            .padding()
-            
-            Spacer()
-        }
-        .presentationDetents([.medium, .large])  // iOS 16+ (optional)
-        .padding()
-    }
-}
-
-
-struct WorkoutCardRow: View {
-    let workout: WorkoutModel
-    @ObservedObject var workoutViewModel: WorkoutViewModel
-    
-    // For color picking
-    @State private var showColorPicker = false
-    @State private var accentColor: Color = .blue  // Or load from model if desired
-    
-    // For name editing
-    @State private var isEditing = false
-    @State private var editedWorkoutName: String = ""
-    
-    // Layout
-    var cardWidth: CGFloat = 336
-    var cardHeight: CGFloat = 120
-    var cornerRadius: CGFloat = 15
-    
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            // 1) NavigationLink for the main card tap
-            NavigationLink(destination: ExercisesView(workoutID: workout.id)) {
-                ZStack {
-                    // The custom rectangle with a user-chosen color
-                    WorkoutCustomRoundedRectangle(
-                        progress: 0.05,
-                        accentColor: accentColor,
-                        cornerRadius: cornerRadius,
-                        width: cardWidth,
-                        height: cardHeight
-                    )
                     
-                    // Workout info text
-                    VStack(alignment: .leading, spacing: 8) {
-                        if isEditing {
-                            TextField("Workout Name", text: $editedWorkoutName, onCommit: {
-                                workoutViewModel.updateWorkout(workout: workout, newName: editedWorkoutName)
-                                // Update local model name
-                                // (If you have a color to store, do it here too)
-                                isEditing = false
-                            })
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .padding(.top, 8)
-                            .frame(width: 250)
-                        } else {
-                            Text(workout.name)
-                                .font(.title3)
-                                .bold()
-                                .foregroundColor(.white)
-                        }
-                        
-                        if let date = workout.date {
-                            Text("Date: \(date, formatter: DateFormatter.workoutDateFormatter)")
-                                .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.8))
-                        }
+                    if let date = workout.date {
+                        Text("Date: \(date, formatter: DateFormatter.workoutDateFormatter)")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.8))
                     }
-                    .padding()
                 }
-                .frame(width: cardWidth, height: cardHeight)
-            }
-            // Make sure to use a plain button style so the entire card
-            // looks like one clickable area (and does not interfere with the ellipsis).
-            .buttonStyle(PlainButtonStyle())
-            
-            // 2) Ellipsis button (outside the NavigationLink)
-            // so it can be tapped independently
-            Button {
-                showColorPicker.toggle()
-            } label: {
-                Image(systemName: "ellipsis")
-                    .foregroundColor(.black)
-                    .padding(8)
-                    .background(Color.white.opacity(0.3))
-                    .clipShape(Circle())
-            }
-            .padding(.top, 8)
-            .padding(.trailing, 8)
-        }
-        // 3) Color picker sheet
-        .sheet(isPresented: $showColorPicker) {
-            colorPickerSheet
-        }
-    }
-    
-    // MARK: - Color Picker Sheet
-    private var colorPickerSheet: some View {
-        VStack(spacing: 20) {
-            Text("Choose a Color")
-                .font(.headline)
-            
-            ColorPicker("Accent Color", selection: $accentColor, supportsOpacity: false)
-                .padding()
-            
-            Button("Save") {
-                // If you want to persist accentColor in CloudKit or your model,
-                // you would call an update function here, e.g.:
-                // workoutViewModel.updateWorkoutColor(workout, color: accentColor)
-                
-                showColorPicker = false
             }
             .padding()
-            
-            Spacer()
-        }
-        .presentationDetents([.medium, .large]) // iOS 16+ (optional)
-        .padding()
+        )
     }
 }
+
 // DateFormatter for display
 extension DateFormatter {
     static var workoutDateFormatter: DateFormatter {

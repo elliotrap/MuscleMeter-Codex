@@ -21,12 +21,10 @@ struct Exercise: Identifiable {
     var setWeights: [Double]
     var setCompletions: [Bool]
     var setNotes: [String]
-    
-    /// A single note for the entire exercise
     var exerciseNote: String
-    
     var setActualReps: [Int]
     var timestamp: Date
+    
 }
 
 class ExerciseViewModel: ObservableObject {
@@ -217,7 +215,139 @@ class ExerciseViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Update Exercise
+ func updateExercise(
+        recordID: CKRecord.ID,
+        newName: String? = nil,
+        newSets: Int? = nil,
+        newNote: String? = nil,
+        newWeights: [Double]? = nil, 
+        newCompletions: [Bool]? = nil,
+        newSetNotes: [String]? = nil,
+        newActualReps: [Int]? = nil
+    ) {
+        print("ExerciseViewModel: Updating record \(recordID) with multiple fields if provided.")
+        
+        privateDatabase.fetch(withRecordID: recordID) { record, error in
+            if let error = error {
+                print("Error fetching record for update:", error.localizedDescription)
+                return
+            }
+            guard let record = record else {
+                print("No record found for ID:", recordID)
+                return
+            }
+            
+            // Only update fields if the caller provided them (not nil).
+            if let newName = newName {
+                record["name"] = newName as CKRecordValue
+            }
+            if let newSets = newSets {
+                record["sets"] = newSets as CKRecordValue
+            }
+            if let newNote = newNote {
+                record["exerciseNote"] = newNote as CKRecordValue
+            }
+            if let newWeights = newWeights {
+                record["setWeights"] = newWeights as CKRecordValue
+            }
+            if let newCompletions = newCompletions {
+                record["setCompletions"] = newCompletions.map { NSNumber(value: $0) } as CKRecordValue
+            }
+            if let newSetNotes = newSetNotes {
+                record["setNotes"] = newSetNotes as CKRecordValue
+            }
+            if let newActualReps = newActualReps {
+                record["setActualReps"] = newActualReps.map { NSNumber(value: $0) } as CKRecordValue
+            }
+            
+            // Save once, with all changes
+            self.privateDatabase.save(record) { savedRecord, error in
+                if let error = error {
+                    print("Error saving updated record:", error.localizedDescription) // perhaps this is where the error resides
+                } else if let savedRecord = savedRecord {
+                    print("Successfully updated record in CloudKit:", savedRecord.recordID)
+                    
+                    // Update local array so SwiftUI sees the changes
+                    DispatchQueue.main.async {
+                        if let index = self.exercises.firstIndex(where: { $0.recordID == recordID }) {
+                            
+                            // Update only the fields we changed
+                            if let newName = newName {
+                                self.exercises[index].name = newName
+                            }
+                            if let newSets = newSets {
+                                self.exercises[index].sets = newSets
+                                
+                                // 1) Resize arrays to match new set count
+                                self.resizeArraysForSets(index: index, newSets: newSets)
+                            }
+                            if let newNote = newNote {
+                                self.exercises[index].exerciseNote = newNote
+                            }
+                            if let newWeights = newWeights {
+                                self.exercises[index].setWeights = newWeights
+                            }
+                            if let newCompletions = newCompletions {
+                                self.exercises[index].setCompletions = newCompletions
+                            }
+                            if let newSetNotes = newSetNotes {
+                                self.exercises[index].setNotes = newSetNotes
+                            }
+                            if let newActualReps = newActualReps {
+                                self.exercises[index].setActualReps = newActualReps
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Resize Arrays to Match 'sets'
+    private func resizeArraysForSets(index: Int, newSets: Int) {
+        guard index < exercises.count else { return }
+        
+        var exercise = exercises[index]
+        
+        // Resize setWeights
+        if exercise.setWeights.count < newSets {
+            let additional = newSets - exercise.setWeights.count
+            exercise.setWeights.append(contentsOf: Array(repeating: 0.0, count: additional))
+        } else if exercise.setWeights.count > newSets {
+            exercise.setWeights = Array(exercise.setWeights.prefix(newSets))
+        }
+        
+        // Resize setActualReps
+        if exercise.setActualReps.count < newSets {
+            let additional = newSets - exercise.setActualReps.count
+            exercise.setActualReps.append(contentsOf: Array(repeating: 0, count: additional))
+        } else if exercise.setActualReps.count > newSets {
+            exercise.setActualReps = Array(exercise.setActualReps.prefix(newSets))
+        }
+        
+        // Resize setCompletions
+        if exercise.setCompletions.count < newSets {
+            let additional = newSets - exercise.setCompletions.count
+            exercise.setCompletions.append(contentsOf: Array(repeating: false, count: additional))
+        } else if exercise.setCompletions.count > newSets {
+            exercise.setCompletions = Array(exercise.setCompletions.prefix(newSets))
+        }
+        
+        // Resize setNotes
+        if exercise.setNotes.count < newSets {
+            let additional = newSets - exercise.setNotes.count
+            exercise.setNotes.append(contentsOf: Array(repeating: "", count: additional))
+        } else if exercise.setNotes.count > newSets {
+            exercise.setNotes = Array(exercise.setNotes.prefix(newSets))
+        }
+        
+        // Update the exercise in your local array (to trigger SwiftUI updates)
+        exercises[index] = exercise
+    }
+
+    
+    
+//    // MARK: - Update Exercise
     func updateExerciseWeights(
         recordID: CKRecord.ID,
         newWeights: [Double],
@@ -321,6 +451,108 @@ class ExerciseViewModel: ObservableObject {
         }
     }
     
+
+        func updateExerciseSets(recordID: CKRecord.ID, newSets: Int) {
+            print("ExerciseViewModel: Updating 'sets' to \(newSets) in record \(recordID).")
+            
+            privateDatabase.fetch(withRecordID: recordID) { record, error in
+                if let error = error {
+                    print("Error fetching record for update:", error.localizedDescription)
+                    return
+                }
+                guard let record = record else {
+                    print("No record found for ID:", recordID)
+                    return
+                }
+                
+                // Update the CloudKit field
+                record["sets"] = newSets as CKRecordValue
+                
+                // Save the changes
+                self.privateDatabase.save(record) { savedRecord, error in
+                    if let error = error {
+                        print("Error saving updated record:", error.localizedDescription)
+                    } else if let savedRecord = savedRecord {
+                        print("Successfully updated 'sets' in CloudKit:", savedRecord.recordID)
+                        
+                        // Update the local array so SwiftUI sees the new sets count
+                        DispatchQueue.main.async {
+                            if let index = self.exercises.firstIndex(where: { $0.recordID == recordID }) {
+                                self.exercises[index].sets = newSets
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    
+func updateExerciseName(recordID: CKRecord.ID, newName: String) {
+    print("ExerciseViewModel: Attempting to update record \(recordID) in CloudKit with new name:", newName)
+    
+    privateDatabase.fetch(withRecordID: recordID) { record, error in
+        if let error = error {
+            print("Error fetching record for update:", error.localizedDescription)
+            return
+        }
+        guard let record = record else {
+            print("No record found for ID:", recordID)
+            return
+        }
+        
+        // Overwrite the 'name' field in CloudKit
+        record["name"] = newName as CKRecordValue
+        
+        // Save changes
+        self.privateDatabase.save(record) { savedRecord, error in
+            if let error = error {
+                print("Error saving updated record:", error.localizedDescription)
+            } else if let savedRecord = savedRecord {
+                print("Successfully updated record in CloudKit:", savedRecord.recordID)
+                
+                // Update the local array so SwiftUI sees the new name
+                DispatchQueue.main.async {
+                    if let index = self.exercises.firstIndex(where: { $0.recordID == recordID }) {
+                        self.exercises[index].name = newName
+                    }
+                }
+            }
+        }
+    }
+}
+    
+    func updateExerciseNote(recordID: CKRecord.ID, newNote: String) {
+        print("ExerciseViewModel: Updating 'exerciseNote' to \(newNote) in record \(recordID).")
+        
+        privateDatabase.fetch(withRecordID: recordID) { record, error in
+            if let error = error {
+                print("Error fetching record for update:", error.localizedDescription)
+                return
+            }
+            guard let record = record else {
+                print("No record found for ID:", recordID)
+                return
+            }
+            
+            // Overwrite just the exerciseNote field
+            record["exerciseNote"] = newNote as CKRecordValue
+            
+            self.privateDatabase.save(record) { savedRecord, error in
+                if let error = error {
+                    print("Error saving updated record:", error.localizedDescription)
+                } else if let savedRecord = savedRecord {
+                    print("Successfully updated 'exerciseNote' in CloudKit:", savedRecord.recordID)
+                    
+                    // Update the local array
+                    DispatchQueue.main.async {
+                        if let index = self.exercises.firstIndex(where: { $0.recordID == recordID }) {
+                            self.exercises[index].exerciseNote = newNote
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     // MARK: - Delete Exercise
     func deleteExercise(at offsets: IndexSet) {
         offsets.forEach { index in
@@ -339,6 +571,7 @@ class ExerciseViewModel: ObservableObject {
             }
         }
     }
+    
     
     // MARK: - Delete All Exercises (Dev Only)
     func deleteAllExercises() {

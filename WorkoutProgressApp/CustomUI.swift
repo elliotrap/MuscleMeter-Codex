@@ -225,96 +225,51 @@ struct CustomRoundedRectangle2: View {
 
 
 struct ExerciseCustomRoundedRectangle: View {
-    var progressFraction: CGFloat = 0.0
-    var progress: CGFloat = 0.2
-    var currentLevel: ExperienceLevel
+    var progress: CGFloat = 0.5
+    var accentColor: Color = .blue
     var cornerRadius: CGFloat = 10
     var width: CGFloat = 340
     var height: CGFloat = 140
     
-    private let dramaticMultiColorGradient = Gradient(stops: [
-        Gradient.Stop(color: .red, location: 0.0),
-        Gradient.Stop(color: .red, location:  78.999 / 315.0),
-        Gradient.Stop(color: .purple,  location: 79.0 / 315.0),
-        Gradient.Stop(color: .purple,  location: 157.999 / 315.0),
-        Gradient.Stop(color: .blue,  location: 158.0 / 315.0),
-        Gradient.Stop(color: .blue,  location: 235.999 / 315.0),
-        Gradient.Stop(color: .green,   location: 236.0 / 315.0),
-        Gradient.Stop(color: .green,   location: 315.0)
-    ])
-    
     var body: some View {
-        let dynamicColor = dramaticMultiColorGradient.interpolatedColor(at: progressFraction)
-        
         ZStack {
-            // 1) Outer stroke shape
+            // Outline stroke
             RoundedRectangle(cornerRadius: cornerRadius + 9)
                 .stroke(lineWidth: 5)
                 .foregroundColor(Color("NeomorphBG4").opacity(0.7))
-                // Slightly larger than the main shape
-                .frame(width: width + 10, height: height + 9)
+                .frame(width: width + 15, height: height + 15)
             
-            ZStack {
-                // 2) Partial glow background (left side)
-                HStack {
-                    // You can decide how wide you want the glow to be
-                    RoundedRectangle(cornerRadius: cornerRadius * 3)
-                        .fill(
-                            currentLevel == .freak
-                            ? AnyShapeStyle(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [.red, .blue, .green]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                ).opacity(0.35)
-                            )
-                            : AnyShapeStyle(dynamicColor.opacity(0.35))
-                        )
-                        .frame(width: progress * (width * 0.3), height: height)
-                        .blur(radius: 15)
-                    
-                    Spacer()
-                }
-                
-                // 3) Main gradient shape
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(stops: {
-                                if currentLevel == .freak {
-                                    // Rainbow logic
-                                    return [
-                                        .init(color: .red,  location: 0.00),
-                                        .init(color: .blue, location: 0.50 * progress),
-                                        .init(color: .green, location: 0.90 * progress),
-                                        
-                                        // White portion
-                                        .init(color: .white.opacity(0.14), location: progress),
-                                        .init(color: .white.opacity(0.1),  location: 1.0)
-                                    ]
-                                } else {
-                                    // Single color -> white logic
-                                    return [
-                                        .init(color: dynamicColor.opacity(1),   location: 0.0),
-                                        .init(color: dynamicColor.opacity(0.4), location: progress),
-                                        .init(color: Color("NeomorphBG3").opacity(0.6), location: progress),
-                                        .init(color: Color("NeomorphBG3").opacity(0.2), location: 1.0)
-                                    ]
-                                }
-                            }()),
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(width: width, height: height)
+            // Partial glow on the left side
+            HStack {
+                RoundedRectangle(cornerRadius: cornerRadius * 3)
+                    .fill(accentColor.opacity(0.65))
+                    .frame(width: progress * (width * 0.3), height: height)
+                    .blur(radius: 15)
+                Spacer()
             }
+            
+            // Main accent rectangle
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: accentColor,              location: 0.0),
+                            .init(color: accentColor.opacity(0.3), location: progress),
+                            .init(color: Color("NeomorphBG3").opacity(0.6), location: progress),
+                            .init(color: Color("NeomorphBG3").opacity(0.3), location: 1.0)
+                        ]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: width, height: height)
         }
     }
 }
 
 struct WorkoutCustomRoundedRectangle: View {
     /// The fraction [0..1] controlling how much of the rectangle is tinted vs. lighter.
-    var progress: CGFloat = 0.2
+    var progress: CGFloat = 0.5
     
     /// The user-selected color for accenting this rectangle.
     var accentColor: Color = .blue
@@ -358,6 +313,265 @@ struct WorkoutCustomRoundedRectangle: View {
                     )
                 )
                 .frame(width: width, height: 116)
+        }
+    }
+}
+
+
+struct WeightField: View {
+    let exercise: Exercise
+    let index: Int
+    let evm: ExerciseViewModel
+
+    // Local state to hold the current text value.
+    @State private var localText: String = ""
+    // A debouncing work item.
+    @State private var debouncedWorkItem: DispatchWorkItem?
+
+    // A NumberFormatter to display the weight correctly.
+    private let formatter: NumberFormatter = {
+        let nf = NumberFormatter()
+        nf.minimumFractionDigits = 0
+        nf.maximumFractionDigits = 2 // Adjust as needed
+        return nf
+    }()
+
+    var body: some View {
+        TextField(
+            "",
+            text: $localText
+        )
+        .keyboardType(.decimalPad)
+        .foregroundColor(.white)
+        .onAppear {
+            // Initialize the text field with the current weight.
+            let weight = exercise.setWeights[index]
+            localText = weight == 0 ? "" : (formatter.string(from: NSNumber(value: weight)) ?? "")
+        }
+        .onChange(of: localText) { newValue in
+            // Cancel any pending update.
+            debouncedWorkItem?.cancel()
+            
+            // Create a new work item for the update.
+            let workItem = DispatchWorkItem {
+                // Convert the string to a double and update CloudKit.
+                if newValue.isEmpty {
+                    updateWeightValue(for: exercise, at: index, newWeight: 0)
+                } else if let weightValue = Double(newValue) {
+                    updateWeightValue(for: exercise, at: index, newWeight: weightValue)
+                }
+            }
+            debouncedWorkItem = workItem
+            
+            // Schedule the update after a 0.5-second delay.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+        }
+    }
+
+    private func updateWeightValue(for exercise: Exercise, at index: Int, newWeight: Double) {
+        guard let recordID = exercise.recordID else { return }
+        
+        // Copy the current weights and update only the specified index.
+        var updatedWeights = exercise.setWeights
+        updatedWeights[index] = newWeight
+        
+        // Call the CloudKit update method.
+        evm.updateExercise(recordID: recordID, newWeights: updatedWeights)
+    }
+}
+
+
+struct ActualRepsField: View {
+    let exercise: Exercise
+    let index: Int
+    let evm: ExerciseViewModel
+
+    // Local state for the text field's current value.
+    @State private var localText: String = ""
+    // A debouncing work item to delay updates.
+    @State private var debouncedWorkItem: DispatchWorkItem?
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text("(")
+            TextField(
+                "",
+                text: $localText
+            )
+            .keyboardType(.numberPad)
+            .foregroundColor(.white)
+            .frame(width: 23)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        // Dismiss the keyboard.
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
+                }
+            }
+            Text(")")
+        }
+        .onAppear {
+            // Initialize the text field with the current reps value.
+            let reps = exercise.setActualReps[index]
+            localText = reps == 0 ? "" : String(reps)
+        }
+        .onChange(of: localText) { newValue in
+            // Cancel any previously scheduled update.
+            debouncedWorkItem?.cancel()
+            
+            // Create a new work item to update the reps value.
+            let workItem = DispatchWorkItem {
+                if newValue.isEmpty {
+                    updateActualReps(for: exercise, at: index, newReps: 0)
+                } else if let repsValue = Int(newValue) {
+                    updateActualReps(for: exercise, at: index, newReps: repsValue)
+                }
+            }
+            debouncedWorkItem = workItem
+            
+            // Schedule the update after a 0.5-second delay.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+        }
+    }
+    
+    private func updateActualReps(for exercise: Exercise, at index: Int, newReps: Int) {
+        guard let recordID = exercise.recordID else { return }
+        // Copy the current reps array and update only the specified index.
+        var updatedReps = exercise.setActualReps
+        updatedReps[index] = newReps
+        
+        // Call the CloudKit update method.
+        evm.updateExercise(recordID: recordID, newActualReps: updatedReps)
+    }
+}
+
+struct SetsField: View {
+    let exercise: Exercise
+    let evm: ExerciseViewModel
+    private let maxSets: Int = 15
+    private let minSets: Int = 1
+
+    // Local state for the text field's current value.
+    @State private var localText: String = ""
+    // A debouncing work item to delay the update.
+    @State private var debouncedWorkItem: DispatchWorkItem?
+    // An optional error message for when input is out of range.
+    @State private var errorMessage: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Sets:")
+                    .foregroundColor(.white)
+                TextField(
+                    "Sets",
+                    text: $localText
+                )
+                .keyboardType(.numberPad)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .frame(width: 60)
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") {
+                            UIApplication.shared.sendAction(
+                                #selector(UIResponder.resignFirstResponder),
+                                to: nil, from: nil, for: nil)
+                        }
+                    }
+                }
+            }
+            // Display error message if one exists.
+            if let errorMessage = errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+        }
+        .onAppear {
+            // Initialize the text field with the current sets value.
+            localText = exercise.sets == 0 ? "" : String(exercise.sets)
+        }
+        .onChange(of: localText) { newValue in
+            // Cancel any pending update.
+            debouncedWorkItem?.cancel()
+            
+            let workItem = DispatchWorkItem {
+                // If the text field is empty, clear any error and do nothing.
+                guard !newValue.isEmpty else {
+                    errorMessage = nil
+                    return
+                }
+                
+                // Validate input is an integer.
+                if let newSets = Int(newValue) {
+                    // Enforce minimum number of sets.
+                    if newSets < minSets {
+                        errorMessage = "Minimum allowed sets is \(minSets)"
+                        return
+                    }
+                    // Enforce maximum number of sets.
+                    if newSets > maxSets {
+                        errorMessage = "Maximum allowed sets is \(maxSets)"
+                        return
+                    }
+                    
+                    // Input is valid—clear any previous error.
+                    errorMessage = nil
+                    // Only update if the new value differs from the current model.
+                    if newSets != exercise.sets, let recordID = exercise.recordID {
+                        evm.updateExercise(recordID: recordID, newSets: newSets)
+                    }
+                } else {
+                    // Show an error if the input isn't a valid number.
+                    errorMessage = "Please enter a valid number."
+                }
+            }
+            
+            debouncedWorkItem = workItem
+            // Schedule the update after 0.5 seconds of inactivity.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+        }
+    }
+}
+
+struct ExerciseNameField: View {
+    let exercise: Exercise
+    let evm: ExerciseViewModel
+
+    // Local state for the text field's current value.
+    @State private var localText: String = ""
+    // A debouncing work item to delay the update.
+    @State private var debouncedWorkItem: DispatchWorkItem?
+
+    var body: some View {
+        HStack {
+            Text("Name:")
+                .foregroundColor(.white)
+            TextField("Exercise Name", text: $localText)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .frame(width: 200)
+        }
+        .onAppear {
+            // Initialize the text field with the current exercise name.
+            localText = exercise.name
+        }
+        .onChange(of: localText) { newValue in
+            // Cancel any pending update.
+            debouncedWorkItem?.cancel()
+            
+            // Create a new work item to update the exercise name.
+            let workItem = DispatchWorkItem {
+                if let recordID = exercise.recordID {
+                    evm.updateExercise(recordID: recordID, newName: newValue)
+                }
+            }
+            debouncedWorkItem = workItem
+            
+            // Schedule the update after a short delay (0.5 seconds).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
         }
     }
 }
