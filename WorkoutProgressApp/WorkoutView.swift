@@ -17,7 +17,6 @@ struct WorkoutsListView: View {
     @State private var selectedWorkout: WorkoutModel? = nil
     
     var body: some View {
-        NavigationView {
             listView
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
@@ -41,12 +40,15 @@ struct WorkoutsListView: View {
                 // 1) Add Workout sheet (unchanged)
                 .sheet(isPresented: $showAddWorkoutSheet) {
                     AddWorkoutView(workoutViewModel: workoutViewModel)
+                        .presentationDetents([.fraction(0.4)])
+                        .presentationDragIndicator(.visible)
                 }
                 // 2) Color picker sheet
                 .sheet(isPresented: $showColorPicker) {
                     colorPickerSheet
+                        .presentationDetents([.fraction(0.5)])
+                        .presentationDragIndicator(.visible)
                 }
-        }
     }
     
     // MARK: - The List
@@ -206,8 +208,7 @@ struct AddWorkoutView: View {
     @State private var customSectionTitle: String = ""
     
     var body: some View {
-        NavigationView {
-            Form {
+             Form {
                 Section(header: Text("Workout Name")) {
                     TextField("Enter workout name", text: $workoutName)
                 }
@@ -266,7 +267,7 @@ struct AddWorkoutView: View {
                     }
                 }
             }
-        }
+    
         .onAppear {
             workoutViewModel.fetchSectionTitles()
         }
@@ -320,7 +321,7 @@ struct WorkoutCardView: View {
             }
             
             // 3) Hidden NavigationLink
-            NavigationLink(
+            NavigationLink( // 'init(destination:isActive:label:)' was deprecated in iOS 16.0: use NavigationLink(value:label:), or navigationDestination(isPresented:destination:), inside a NavigationStack or NavigationSplitView
                 destination: ExercisesView(workoutID: workout.id),
                 isActive: $navigate
             ) {

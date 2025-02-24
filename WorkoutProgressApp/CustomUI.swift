@@ -7,6 +7,9 @@
 import SwiftUI
 
 
+
+
+
 struct CustomRoundedRectangle: View {
     /// The fraction [0..1] controlling which color to pick from the multi-stop gradient
     var progressFraction: CGFloat = 0.0
@@ -223,6 +226,163 @@ struct CustomRoundedRectangle2: View {
     }
 }
 
+struct CustomRoundedRectangle3: View {
+    /// The fraction [0..1] controlling where the colored portion ends.
+    /// (e.g., 0.2 means 20% tinted, 80% white)
+    var progress: CGFloat = 0.2
+    
+    /// The user's current experience level
+    var currentLevel: ExperienceLevel
+    
+    var cornerRadius: CGFloat = 10
+    var width: CGFloat = 130
+    var height: CGFloat = 130
+    
+    // ---------------------------------------------
+    // 1) Same color logic for Noob..Elite..Freak
+    // ---------------------------------------------
+    fileprivate func colorForLevel(_ level: ExperienceLevel) -> (background: Color, foreground: Color) {
+        switch level {
+        case .noob:
+            return (.red, .white)
+        case .beginner:
+            return (.yellow, .white)
+        case .intermediate:
+            return (.orange, .black)
+        case .advanced:
+            return (.blue, .white)
+        case .elite:
+            return (.green, .white)
+        case .freak:
+            // We won't actually use .red for freak
+            // because we're going to override it with rainbow.
+            return (.red, .red)
+        }
+    }
+    
+    var body: some View {
+        
+        ZStack {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(lineWidth: 5)
+                .foregroundColor(Color("NeomorphBG4").opacity(0.7))
+                .frame(width: 145, height: 145)
+            // 2) Get the normal bgColor for non-freak levels
+            let (bgColor, _) = colorForLevel(currentLevel)
+            
+            
+            ZStack {
+                
+                VStack {
+                    Spacer()
+                        .frame(height: 120)
+                    // MARK: - The partial glow background
+                    // This shape’s width is only up to `progress * width`
+                    RoundedRectangle(cornerRadius: 50)
+                        .fill(bgColor.opacity(0.55)) // tinted color
+                        .frame(width: 150, height: 20 )
+                    // Add a blur so it looks like a soft glow
+                        .blur(radius: 10)
+                        
+                
+                }
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(stops: {
+                                if currentLevel == .freak {
+                                    // ------------------------------------------------
+                                    // 3a) If freak => multiple stops for a rainbow
+                                    //     from 0..progress, then white from progress..1
+                                    // ------------------------------------------------
+                                    return [
+                                        .init(color: .red,    location: 0.00),
+                                        .init(color: .blue, location: 0.40 * progress),
+                                        .init(color: .green,  location: 0.60 * progress),
+                                        
+                                        // White portion (progress..1.0)
+                                        .init(color: .white.opacity(0.14), location: progress),
+                                        .init(color: .white.opacity(0.1),  location: 1.0)
+                                    ]
+                                    
+                                } else {
+                                    // ------------------------------------------------
+                                    // 3b) Normal logic: single color -> white
+                                    // ------------------------------------------------
+                                    return [
+                                        .init(color: bgColor.opacity(1), location: 0.0),
+                                        .init(color: bgColor.opacity(0.3), location: progress),
+                                        
+                                        // White portion
+                                        .init(color: Color("NeomorphBG3").opacity(0.6), location: progress),
+                                        .init(color: Color("NeomorphBG3").opacity(0.3),  location: 1.0)
+                                    ]
+                                }
+                            }()),
+                            startPoint: .bottom,
+                            endPoint: .top
+                        )
+                    )
+                    .frame(width: width, height: 130)
+            }
+        }
+    }
+}
+
+
+/// A rectangle shape with individually rounded corners.
+struct CustomRoundedRectangle4: Shape {
+    var topLeftRadius: CGFloat = 0
+    var topRightRadius: CGFloat = 0
+    var bottomLeftRadius: CGFloat = 0
+    var bottomRightRadius: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        let w = rect.size.width
+        let h = rect.size.height
+        
+        // Ensure radii do not exceed half the rectangle’s dimensions
+        let tr = min(topRightRadius, min(w, h))
+        let tl = min(topLeftRadius, min(w, h))
+        let bl = min(bottomLeftRadius, min(w, h))
+        let br = min(bottomRightRadius, min(w, h))
+        
+        var path = Path()
+
+        // Start at top-left, move right to the beginning of the top-right curve
+        path.move(to: CGPoint(x: tl, y: 0))
+        
+        // Top edge (straight line) + top-right corner
+        path.addLine(to: CGPoint(x: w - tr, y: 0))
+        path.addQuadCurve(
+            to: CGPoint(x: w, y: tr),
+            control: CGPoint(x: w, y: 0)
+        )
+        
+        // Right edge (straight line) + bottom-right corner
+        path.addLine(to: CGPoint(x: w, y: h - br))
+        path.addQuadCurve(
+            to: CGPoint(x: w - br, y: h),
+            control: CGPoint(x: w, y: h)
+        )
+        
+        // Bottom edge (straight line) + bottom-left corner
+        path.addLine(to: CGPoint(x: bl, y: h))
+        path.addQuadCurve(
+            to: CGPoint(x: 0, y: h - bl),
+            control: CGPoint(x: 0, y: h)
+        )
+        
+        // Left edge (straight line) + top-left corner
+        path.addLine(to: CGPoint(x: 0, y: tl))
+        path.addQuadCurve(
+            to: CGPoint(x: tl, y: 0),
+            control: CGPoint(x: 0, y: 0)
+        )
+        
+        return path
+    }
+}
 
 struct ExerciseCustomRoundedRectangle: View {
     var progress: CGFloat = 0.5
@@ -232,37 +392,49 @@ struct ExerciseCustomRoundedRectangle: View {
     var height: CGFloat = 140
     
     var body: some View {
+        
         ZStack {
-            // Outline stroke
-            RoundedRectangle(cornerRadius: cornerRadius + 9)
-                .stroke(lineWidth: 5)
-                .foregroundColor(Color("NeomorphBG4").opacity(0.7))
-                .frame(width: width + 15, height: height + 15)
-            
-            // Partial glow on the left side
-            HStack {
-                RoundedRectangle(cornerRadius: cornerRadius * 3)
-                    .fill(accentColor.opacity(0.65))
-                    .frame(width: progress * (width * 0.3), height: height)
-                    .blur(radius: 15)
-                Spacer()
+            VStack {
+    
+                // MARK: - The partial glow background
+                // Here, you can also switch to a rainbow if freak:
+                HStack {
+                    RoundedRectangle(cornerRadius: 50)
+                        .fill(
+                            AnyShapeStyle(accentColor.opacity(0.65))
+                        )
+                        .frame(width: 55, height: height)
+                        .blur(radius: 20)
+                    
+                    Spacer().frame(height: 300)
+                }
             }
-            
-            // Main accent rectangle
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(stops: [
-                            .init(color: accentColor,              location: 0.0),
-                            .init(color: accentColor.opacity(0.3), location: progress),
-                            .init(color: Color("NeomorphBG3").opacity(0.6), location: progress),
-                            .init(color: Color("NeomorphBG3").opacity(0.3), location: 1.0)
-                        ]),
-                        startPoint: .leading,
-                        endPoint: .trailing
+            ZStack {
+                // Outline stroke
+                RoundedRectangle(cornerRadius: cornerRadius + 9)
+                    .stroke(lineWidth: 5)
+                    .foregroundColor(Color("NeomorphBG4").opacity(0.7))
+                    .frame(width: width + 15, height: height + 15)
+                
+         
+                
+                // Main accent rectangle
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(stops: [
+                                .init(color: accentColor,              location: 0.03),
+                                .init(color: accentColor.opacity(0.3), location: 0.015),
+                                .init(color: Color("NeomorphBG3").opacity(0.6), location: progress),
+                                .init(color: Color("NeomorphBG3").opacity(0.2), location: 1.0)
+                            ]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
                     )
-                )
-                .frame(width: width, height: height)
+                    .frame(width: width, height: height)
+                
+            }
         }
     }
 }
@@ -338,11 +510,18 @@ struct WeightField: View {
 
     var body: some View {
         TextField(
-            "",
+            "lbs",
             text: $localText
         )
         .keyboardType(.decimalPad)
-        .foregroundColor(.white)
+        .multilineTextAlignment(.center)      // Centers the text horizontally
+        .padding(.vertical, 4)               // Some vertical padding inside the field
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(.black).opacity(0.2))
+        )
+        .foregroundColor(.white).opacity(0.8)
+        .frame(width: 50)
         .onAppear {
             // Initialize the text field with the current weight.
             let weight = exercise.setWeights[index]
@@ -385,43 +564,56 @@ struct ActualRepsField: View {
     let exercise: Exercise
     let index: Int
     let evm: ExerciseViewModel
-
-    // Local state for the text field's current value.
+    
+    @Binding var isTextFieldVisible: Bool
+    @FocusState private var isFocused: Bool  // Focus for this field
     @State private var localText: String = ""
-    // A debouncing work item to delay updates.
-    @State private var debouncedWorkItem: DispatchWorkItem?
 
+    @State private var debouncedWorkItem: DispatchWorkItem?
+    
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 2) {
             Text("(")
-            TextField(
-                "",
-                text: $localText
-            )
-            .keyboardType(.numberPad)
-            .foregroundColor(.white)
-            .frame(width: 23)
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") {
-                        // Dismiss the keyboard.
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                    }
-                }
-            }
+                .foregroundColor(.white).opacity(0.8)
+            
+            TextField("", text: $localText)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.center)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color(.black).opacity(0.2))
+                )
+                .foregroundColor(.white).opacity(0.8)
+                .frame(width: 25)
+                .focused($isFocused)  // <-- We'll track focus
+                        
             Text(")")
+                .foregroundColor(.white).opacity(0.8)
         }
         .onAppear {
-            // Initialize the text field with the current reps value.
+            // Initialize the text field with the current reps
+            let reps = exercise.setActualReps[index]
+            localText = reps == 0 ? "" : String(reps)
+        }
+        .onAppear {
+            // Initialize text
             let reps = exercise.setActualReps[index]
             localText = reps == 0 ? "" : String(reps)
         }
         .onChange(of: localText) { newValue in
-            // Cancel any previously scheduled update.
+            // Possibly update reps after a delay
+            // or immediately if you prefer
+        }
+        // 1) If focus changes to false, and text is empty => revert to plus icon
+        .onChange(of: isFocused) { newValue in
+            if !newValue && localText.isEmpty {
+                isTextFieldVisible = false
+            }
+        }
+        .onChange(of: localText) { newValue in
             debouncedWorkItem?.cancel()
             
-            // Create a new work item to update the reps value.
             let workItem = DispatchWorkItem {
                 if newValue.isEmpty {
                     updateActualReps(for: exercise, at: index, newReps: 0)
@@ -430,19 +622,14 @@ struct ActualRepsField: View {
                 }
             }
             debouncedWorkItem = workItem
-            
-            // Schedule the update after a 0.5-second delay.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
         }
     }
     
     private func updateActualReps(for exercise: Exercise, at index: Int, newReps: Int) {
         guard let recordID = exercise.recordID else { return }
-        // Copy the current reps array and update only the specified index.
         var updatedReps = exercise.setActualReps
         updatedReps[index] = newReps
-        
-        // Call the CloudKit update method.
         evm.updateExercise(recordID: recordID, newActualReps: updatedReps)
     }
 }
@@ -464,13 +651,20 @@ struct SetsField: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("Sets:")
-                    .foregroundColor(.white)
+                    .foregroundColor(.white).opacity(0.8)
                 TextField(
                     "Sets",
                     text: $localText
                 )
-                .keyboardType(.numberPad)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.center)      // Centers the text horizontally
+                .padding(.vertical, 4)               // Some vertical padding inside the field
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color(.black).opacity(0.2))
+                )
+                .foregroundColor(.white).opacity(0.8)
+                .frame(width: 50)
                 .frame(width: 60)
                 .toolbar {
                     ToolbarItemGroup(placement: .keyboard) {
@@ -483,6 +677,29 @@ struct SetsField: View {
                     }
                 }
             }
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(lineWidth: 5)
+                        .foregroundColor(Color("NeomorphBG4").opacity(0.7))
+                        .frame(width: 156, height: 60)
+                    
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 9)
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        Color("NeomorphBG2").opacity(0.6),
+                                        Color("NeomorphBG2").opacity(0.6)
+                                    ]),
+                                    startPoint: .bottom,
+                                    endPoint: .topTrailing
+                                )
+                            )
+                            .frame(width: 143, height: 46)
+                    }
+                }
+            )
             // Display error message if one exists.
             if let errorMessage = errorMessage {
                 Text(errorMessage)
@@ -549,11 +766,43 @@ struct ExerciseNameField: View {
     var body: some View {
         HStack {
             Text("Name:")
-                .foregroundColor(.white)
+                .foregroundColor(.white).opacity(0.8)
             TextField("Exercise Name", text: $localText)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.center)      // Centers the text horizontally
+                .padding(.vertical, 4)               // Some vertical padding inside the field
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color(.black).opacity(0.2))
+                )
+                .foregroundColor(.white).opacity(0.8)
                 .frame(width: 200)
         }
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(lineWidth: 5)
+                    .foregroundColor(Color("NeomorphBG4").opacity(0.7))
+                    .frame(width: 286, height: 60)
+                
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color("NeomorphBG2").opacity(0.6),
+                                    Color("NeomorphBG2").opacity(0.6)
+                                ]),
+                                startPoint: .bottom,
+                                endPoint: .topTrailing
+                            )
+                        )
+                        .frame(width: 273, height: 46)
+                    
+          
+                }
+            }
+        )
         .onAppear {
             // Initialize the text field with the current exercise name.
             localText = exercise.name
@@ -574,4 +823,125 @@ struct ExerciseNameField: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
         }
     }
+}
+
+
+struct RepsField: View {
+    let exercise: Exercise
+    let evm: ExerciseViewModel
+    private let minReps: Int = 1
+
+    // Local state for the text field's current value.
+    @State private var localText: String = ""
+    // A debouncing work item to delay updates.
+    @State private var debouncedWorkItem: DispatchWorkItem?
+    // An optional error message for invalid input.
+    @State private var errorMessage: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Reps:")
+                    .foregroundColor(.white).opacity(0.8)
+                TextField(
+                    "Reps",
+                    text: $localText
+                )
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.center)      // Centers the text horizontally
+                .padding(.vertical, 4)               // Some vertical padding inside the field
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color(.black).opacity(0.2))
+                )
+                .foregroundColor(.white).opacity(0.8)
+                .frame(width: 60)
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") {
+                            UIApplication.shared.sendAction(
+                                #selector(UIResponder.resignFirstResponder),
+                                to: nil, from: nil, for: nil)
+                        }
+                    }
+                }
+            }
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(lineWidth: 5)
+                        .foregroundColor(Color("NeomorphBG4").opacity(0.7))
+                        .frame(width: 156, height: 60)
+                    
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 9)
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        Color("NeomorphBG2").opacity(0.6),
+                                        Color("NeomorphBG2").opacity(0.6)
+                                    ]),
+                                    startPoint: .bottom,
+                                    endPoint: .topTrailing
+                                )
+                            )
+                            .frame(width: 143, height: 46)
+                        
+              
+                    }
+                }
+            )
+            // Display an error message if necessary.
+            if let errorMessage = errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+        }
+        .onAppear {
+            // Initialize the text field with the current reps value.
+            localText = exercise.reps == 0 ? "" : String(exercise.reps)
+        }
+        .onChange(of: localText) { newValue in
+            // Cancel any pending update.
+            debouncedWorkItem?.cancel()
+            
+            let workItem = DispatchWorkItem {
+                // If the field is empty, clear errors and do nothing.
+                guard !newValue.isEmpty else {
+                    errorMessage = nil
+                    return
+                }
+                
+                // Validate that the new value is an integer.
+                if let newReps = Int(newValue) {
+                    // Enforce a minimum value.
+                    if newReps < minReps {
+                        errorMessage = "Minimum allowed reps is \(minReps)"
+                        return
+                    }
+                    
+                    // Input is valid—clear any previous error.
+                    errorMessage = nil
+                    // Only update if the new value is different.
+                    if newReps != exercise.reps, let recordID = exercise.recordID {
+                        evm.updateExercise(recordID: recordID, newReps: newReps)
+                    }
+                } else {
+                    errorMessage = "Please enter a valid number."
+                }
+            }
+            
+            debouncedWorkItem = workItem
+            // Schedule the update after 0.5 seconds of inactivity.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+        }
+    }
+}
+
+import CloudKit
+
+#Preview {
+    ExercisesView(workoutID: CKRecord.ID(recordName: "DummyWorkoutID"))
 }

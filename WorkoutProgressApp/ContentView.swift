@@ -54,7 +54,6 @@ struct MainAppView: View {
     }
     
     var body: some View {
-        NavigationView {
             GeometryReader { geometry in
                 // Compute a scale factor based on available width.
                 let scaleFactor: CGFloat = geometry.size.width < 430 ? 0.90 : 1.05
@@ -270,7 +269,7 @@ struct MainAppView: View {
                     }
                 }
             }
-        }
+        
 
         // OneRM Calculator Sheet.
         .sheet(isPresented: $showOneRMCalculator) {
@@ -308,7 +307,6 @@ struct RankingView: View {
     }
     
     var body: some View {
-        NavigationView {
             VStack {
                 if chartData.isEmpty {
                     Text("No data available")
@@ -339,7 +337,6 @@ struct RankingView: View {
                     }
                 }
             }
-        }
     }
 }
 
@@ -730,7 +727,6 @@ struct OneRepMaxCalculatorView: View {
     }
 
     var body: some View {
-        NavigationView {
             Form {
                 Section(header: Text("Enter your set info")) {
                     TextField("Weight Used (lbs)", text: $weightUsedText)
@@ -752,7 +748,6 @@ struct OneRepMaxCalculatorView: View {
                     }
                 }
             }
-        }
     }
 }
 

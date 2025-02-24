@@ -13,16 +13,18 @@ struct WorkoutProgressApp: App {
     
     var body: some Scene {
         WindowGroup {
-            if isLoading {
-                LoadingView()
-                    .onAppear {
-                        // Simulate load for 2 seconds, then continue
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            isLoading = false
+            NavigationView {
+                if isLoading {
+                    LoadingView()
+                        .onAppear {
+                            // Simulate load for 2 seconds, then continue
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                isLoading = false
+                            }
                         }
-                    }
-            } else {
-                ContentView()
+                } else {
+                    ContentView()
+                }
             }
         }
     }
