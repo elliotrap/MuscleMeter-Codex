@@ -10,6 +10,30 @@ class CloudKitManager: ObservableObject {
     static let shared = CloudKitManager()
     private let privateDatabase = CKContainer.default().privateCloudDatabase
     
+    
+    func fetchUserWorkouts(
+        for predicate: NSPredicate,
+        completion: @escaping (Result<[CKRecord], Error>) -> Void
+    ) {
+        let query = CKQuery(recordType: "UserWorkout", predicate: predicate)
+        
+        // Optionally sort by creation date or any other field
+        let sort = NSSortDescriptor(key: "creationDate", ascending: false)
+        query.sortDescriptors = [sort]
+        
+        privateDatabase.perform(query, inZoneWith: nil) { records, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+            guard let records = records else {
+                completion(.success([]))
+                return
+            }
+            completion(.success(records))
+        }
+    }
+    
     // Save user lifts data to CloudKit
     func saveUserLifts(bodyWeight: Double, bench: Double, squat: Double, deadlift: Double, completion: @escaping (Result<CKRecord, Error>) -> Void) {
         let record = CKRecord(recordType: "UserLifts")

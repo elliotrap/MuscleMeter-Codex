@@ -9,6 +9,9 @@ import SwiftUI
 
 @main
 struct WorkoutProgressApp: App {
+    
+    @StateObject var blockManager = WorkoutBlockManager()
+    @StateObject var workoutViewModel = WorkoutViewModel()
     @State private var isLoading = true
     
     var body: some Scene {
@@ -24,8 +27,13 @@ struct WorkoutProgressApp: App {
                         }
                 } else {
                     ContentView()
+                        .onAppear {
+                            blockManager.fetchBlocks()
+                        }
                 }
             }
+            .environmentObject(blockManager)
+            .environmentObject(workoutViewModel)
         }
     }
 }

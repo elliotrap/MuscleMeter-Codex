@@ -24,8 +24,8 @@ struct Exercise: Identifiable {
     var exerciseNote: String
     var setActualReps: [Int]
     var timestamp: Date
-
     var accentColorHex: String  
+    var sortIndex: Int
 
 }
 
@@ -53,10 +53,12 @@ class ExerciseViewModel: ObservableObject {
         print("  Reps: \(reps)")
         print("  setWeights: \(setWeights)")
         print("  setCompletions: \(setCompletions)")
-
+        
         let setNotes = Array(repeating: "", count: sets)
         let setActualReps = Array(repeating: 0, count: sets)
         
+        // 1) Create the new Exercise with a default sortIndex, e.g., the end of the list
+        let newSortIndex = exercises.count  // or 0 if you prefer at the top
         let newExercise = Exercise(
             recordID: nil,
             name: name,
@@ -67,8 +69,9 @@ class ExerciseViewModel: ObservableObject {
             setNotes: setNotes,
             exerciseNote: exerciseNote,
             setActualReps: setActualReps,
-            timestamp: Date(), 
-            accentColorHex: "#0000FF"
+            timestamp: Date(),
+            accentColorHex: "#0000FF",
+            sortIndex: newSortIndex
         )
         
         // 2) Insert locally
@@ -82,8 +85,8 @@ class ExerciseViewModel: ObservableObject {
             reps: reps,
             setWeights: setWeights,
             setCompletions: setCompletions,
-            setNotes: setNotes,            // <— Provide them
-            setActualReps: setActualReps,  // <— Provide them
+            setNotes: setNotes,
+            setActualReps: setActualReps,
             workoutID: workoutID
         ) { result in
             switch result {
@@ -96,6 +99,11 @@ class ExerciseViewModel: ObservableObject {
                         self.exercises[index].recordID = record.recordID
                     }
                 }
+                
+                // If you want to update the actual sortIndex from CloudKit
+                // (e.g., if the server modifies it), you could fetch it here:
+                // let savedSortIndex = record["sortIndex"] as? Int ?? newSortIndex
+                // self.exercises[index].sortIndex = savedSortIndex
                 
             case .failure(let error):
                 print("ExerciseViewModel: Error saving to CloudKit:", error.localizedDescription)
@@ -149,7 +157,6 @@ class ExerciseViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Fetch Exercises
     func fetchExercises() {
         print("ExerciseViewModel: Fetching exercises from CloudKit for workout:", workoutID)
         
@@ -191,7 +198,10 @@ class ExerciseViewModel: ObservableObject {
                         // 3) Parse accent color (hex string) from record; default to blue ("#0000FF") if not set.
                         let accentColorHex = record["accentColor"] as? String ?? "#0000FF"
                         
-                        // 4) Create the Exercise with the new accentColorHex property.
+                        // 4) Retrieve sortIndex (default to 0 if missing)
+                        let sortIndex = record["sortIndex"] as? Int ?? 0
+                        
+                        // 5) Create the Exercise with the new sortIndex property.
                         let exercise = Exercise(
                             recordID: record.recordID,
                             name: name,
@@ -202,7 +212,9 @@ class ExerciseViewModel: ObservableObject {
                             setNotes: notes,
                             exerciseNote: exerciseNote,
                             setActualReps: actualReps,
-                            timestamp: timestamp, accentColorHex: accentColorHex
+                            timestamp: timestamp,
+                            accentColorHex: accentColorHex,
+                            sortIndex: sortIndex
                         )
                         
                         fetchedExercises.append(exercise)
@@ -211,8 +223,15 @@ class ExerciseViewModel: ObservableObject {
                     }
                 }
                 
-                // 5) Assign on the main thread so the UI updates
+                // 6) Assign on the main thread so the UI updates
                 DispatchQueue.main.async {
+                    // Example: sort by sortIndex ascending
+                    fetchedExercises.sort { $0.sortIndex < $1.sortIndex }
+                    
+                    // If you want to preserve the old timestamp sorting, you could do:
+                    // fetchedExercises.sort { $0.timestamp < $1.timestamp }
+                    // Or combine them if needed.
+                    
                     self.exercises = fetchedExercises
                 }
             }
@@ -456,4 +475,49 @@ class ExerciseViewModel: ObservableObject {
             self.privateDatabase.add(deleteOp)
         }
     }
+    
+    
+    // MARK: - Reorder Exercises in Local Array
+    func reorderExercise(oldIndex: Int, newIndex: Int) {
+        // Remove from oldIndex, insert at newIndex
+        let item = exercises.remove(at: oldIndex)
+        
+        // Clamp the newIndex so it doesn't go out of range
+        let safeIndex = min(newIndex, exercises.count)
+        exercises.insert(item, at: safeIndex)
+        
+        // Reassign sortIndex in local array
+        for (i, _) in exercises.enumerated() {
+            exercises[i].sortIndex = i
+        }
+    }
+    
+    // MARK: - Push new order to CloudKit
+    func updateAllSortIndicesInCloudKit() {
+        for (index, ex) in exercises.enumerated() {
+            updateExerciseSortIndex(exercise: ex, newSortIndex: index)
+        }
+    }
+    
+    private func updateExerciseSortIndex(exercise: Exercise, newSortIndex: Int) {
+        guard let recordID = exercise.recordID else { return }
+        
+        privateDatabase.fetch(withRecordID: recordID) { record, error in
+            if let error = error {
+                print("Error fetching exercise for sortIndex update:", error.localizedDescription)
+                return
+            }
+            guard let record = record else { return }
+            
+            record["sortIndex"] = newSortIndex as CKRecordValue
+            self.privateDatabase.save(record) { savedRecord, error in
+                if let error = error {
+                    print("Error updating exercise sortIndex:", error.localizedDescription)
+                    return
+                }
+                print("Successfully updated sortIndex to \(newSortIndex) for \(exercise.name)")
+            }
+        }
+    }
+    
 }

@@ -448,24 +448,24 @@ struct WorkoutCustomRoundedRectangle: View {
     
     var cornerRadius: CGFloat = 10
     var width: CGFloat = 366
-    var height: CGFloat = 130
+    var height: CGFloat = 116
     
     var body: some View {
         ZStack {
             // Outline shape
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: 20)
                 .stroke(lineWidth: 5)
                 .foregroundColor(Color("NeomorphBG4").opacity(0.7))
-                .frame(width: 380, height: 129)
+                .frame(width: width + 13, height: height + 13)
             
             // Glow behind the rectangle (optional)
-            VStack {
+      
                 Spacer().frame(height: 120)
                 RoundedRectangle(cornerRadius: 50)
                     .fill(accentColor.opacity(0.65))
-                    .frame(width: 390, height: 20)
+                    .frame(width: width, height: 0)
                     .blur(radius: 30)
-            }
+            
             
             // Main accent rectangle
             RoundedRectangle(cornerRadius: cornerRadius)
@@ -473,7 +473,7 @@ struct WorkoutCustomRoundedRectangle: View {
                     LinearGradient(
                         gradient: Gradient(stops: [
                             // 0..progress: accent color
-                            .init(color: accentColor,              location: 0.0),
+                            .init(color: accentColor,              location: 0.08),
                             .init(color: accentColor.opacity(0.3), location: progress),
                             
                             // progress..1: “NeomorphBG3” to lighten the top portion
@@ -484,17 +484,73 @@ struct WorkoutCustomRoundedRectangle: View {
                         endPoint: .top
                     )
                 )
-                .frame(width: width, height: 116)
+                .frame(width: width, height: height)
         }
     }
 }
 
+struct BlockCustomRoundedRectangle: View {
+    /// The fraction [0..1] controlling how much of the rectangle is tinted vs. lighter.
+    var progress: CGFloat = 0.07
+    
+    /// The user-selected color for accenting this rectangle.
+    var accentColor: Color = .blue
+    
+    var cornerRadius: CGFloat = 30
+    var width: CGFloat = 266
+    var height: CGFloat = 266
+    
+    var body: some View {
+        ZStack {
+            // Outline shape
+            RoundedRectangle(cornerRadius: 30)
+                .stroke(lineWidth: 5)
+                .foregroundColor(Color("NeomorphBG4").opacity(0.7))
+                .frame(width: width + 20, height: height + 20)
+            
+            // Glow behind the rectangle (optional)
+      
+             VStack {
+                 Spacer().frame(height: 250)
 
+                RoundedRectangle(cornerRadius: 50)
+                    .fill(
+                        AnyShapeStyle(accentColor.opacity(0.65))
+                    )
+                    .frame(width: width + 70, height: 35)
+                    .blur(radius: 30)
+                
+            }
+            
+            
+            // Main accent rectangle
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(stops: [
+                            // 0..progress: accent color
+                            .init(color: accentColor,              location: 0.00),
+                            .init(color: accentColor.opacity(0.3), location: progress),
+                            
+                            // progress..1: “NeomorphBG3” to lighten the top portion
+                            .init(color: Color("NeomorphBG3").opacity(0.6), location: progress),
+                            .init(color: Color("NeomorphBG3").opacity(0.3), location: 1.0)
+                        ]),
+                        startPoint: .bottom,
+                        endPoint: .top
+                    )
+                )
+                .frame(width: width, height: height)
+        }
+    }
+}
 struct WeightField: View {
     let exercise: Exercise
     let index: Int
     let evm: ExerciseViewModel
+    @FocusState private var isFocused: Bool  // Focus for this field
 
+    
     // Local state to hold the current text value.
     @State private var localText: String = ""
     // A debouncing work item.
@@ -522,6 +578,7 @@ struct WeightField: View {
         )
         .foregroundColor(.white).opacity(0.8)
         .frame(width: 50)
+        .focused($isFocused)  // <-- We'll track focus
         .onAppear {
             // Initialize the text field with the current weight.
             let weight = exercise.setWeights[index]
@@ -640,6 +697,9 @@ struct SetsField: View {
     private let maxSets: Int = 15
     private let minSets: Int = 1
 
+    @FocusState private var isFocused: Bool  // Focus for this field
+
+    
     // Local state for the text field's current value.
     @State private var localText: String = ""
     // A debouncing work item to delay the update.
@@ -666,16 +726,8 @@ struct SetsField: View {
                 .foregroundColor(.white).opacity(0.8)
                 .frame(width: 50)
                 .frame(width: 60)
-                .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button("Done") {
-                            UIApplication.shared.sendAction(
-                                #selector(UIResponder.resignFirstResponder),
-                                to: nil, from: nil, for: nil)
-                        }
-                    }
-                }
+                .focused($isFocused)  // <-- We'll track focus
+
             }
             .background(
                 ZStack {
@@ -753,6 +805,70 @@ struct SetsField: View {
         }
     }
 }
+struct WorkoutNameField: View {
+    let workout: WorkoutModel
+    let evm: WorkoutViewModel
+    @FocusState private var isFocused: Bool  // Focus for this field
+
+    // Local state for the text field's current value
+    @State private var localText: String = ""
+    @State private var isEditing: Bool = false
+    
+    var body: some View {
+        HStack {
+            Text("Name:")
+                .foregroundColor(.white).opacity(0.8)
+            
+           
+                    TextField("Workout Name", text: $localText)
+                    
+                        .multilineTextAlignment(.center)      // Centers the text horizontally
+                        .padding(.vertical, 4)               // Some vertical padding inside the field
+                        .background(
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(Color(.black).opacity(0.2))
+                        )
+                        .foregroundColor(.white).opacity(0.8)
+                        .frame(width: 50)
+                        .frame(width: 60)
+                        .focused($isFocused)  // <-- We'll track focus
+
+                    }
+                    .background(
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(lineWidth: 5)
+                                .foregroundColor(Color("NeomorphBG4").opacity(0.7))
+                                .frame(width: 156, height: 60)
+                            
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 9)
+                                    .fill(
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [
+                                                Color("NeomorphBG2").opacity(0.6),
+                                                Color("NeomorphBG2").opacity(0.6)
+                                            ]),
+                                            startPoint: .bottom,
+                                            endPoint: .topTrailing
+                                        )
+                                    )
+                                    .frame(width: 143, height: 46)
+                            }
+                        }
+                    )
+             
+      
+
+     
+        
+
+        .onAppear {
+            // Initialize the text field with the current workout name
+            localText = workout.name
+        }
+    }
+}
 
 struct ExerciseNameField: View {
     let exercise: Exercise
@@ -768,7 +884,6 @@ struct ExerciseNameField: View {
             Text("Name:")
                 .foregroundColor(.white).opacity(0.8)
             TextField("Exercise Name", text: $localText)
-                .keyboardType(.decimalPad)
                 .multilineTextAlignment(.center)      // Centers the text horizontally
                 .padding(.vertical, 4)               // Some vertical padding inside the field
                 .background(
@@ -940,8 +1055,7 @@ struct RepsField: View {
     }
 }
 
-import CloudKit
 
 #Preview {
-    ExercisesView(workoutID: CKRecord.ID(recordName: "DummyWorkoutID"))
+    BlockCustomRoundedRectangle()
 }

@@ -25,7 +25,7 @@ struct ContentView: View {
     var body: some View {
         Group {
             if isAuthenticated {
-                MainAppView(isAuthenticated: $isAuthenticated)
+                MainMenuView()
             } else {
                 LoginView(isAuthenticated: $isAuthenticated)
             }
@@ -34,15 +34,20 @@ struct ContentView: View {
 }
 
 struct MainAppView: View {
+    @EnvironmentObject var blockManager: WorkoutBlockManager
     @Binding var isAuthenticated: Bool
     @ObservedObject var exerciseModel = ExerciseViewModel(workoutID: CKRecord.ID(recordName: "defaultWorkout"))
     @ObservedObject var cm = ComparisonViewModel()
     @ObservedObject var vm = ViewModel()
     @State private var showOneRMCalculator = false
     @State private var showRankingView = false
-
     
+    let block: WorkoutBlock?  // Make it optional
     
+    init(blockManager: WorkoutBlockManager, isAuthenticated: Binding<Bool>, block: WorkoutBlock? = nil) {
+        self._isAuthenticated = isAuthenticated
+        self.block = block
+    }
     // Hides the keyboard when needed.
     func hideKeyboard() {
         #if canImport(UIKit)
@@ -151,7 +156,7 @@ struct MainAppView: View {
                     // Apply the scale effect and center the content.
                     .scaleEffect(scaleFactor)
                     .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
-                    .toolbar { // Ambiguous use of 'toolbar(content:)'
+                    .toolbar { 
                         ToolbarItemGroup(placement: .keyboard) {
                             Spacer()
                             Button("Done") {
@@ -172,19 +177,22 @@ struct MainAppView: View {
                                         showOneRMCalculator = true
                                     }) {
                                         Text("OneRM Calculator")
-                                            .underline(false)
-                                            .foregroundStyle(.white)
-                                            .frame(width: 56, height: 35)
+                                            .font(.headline)
+                                            .foregroundColor(.white)
+                                            .padding()
+                                            .frame(maxWidth: .infinity)
                                             .background(
                                                 LinearGradient(
                                                     gradient: Gradient(colors: [
-                                                        Color("NeomorphBG3").opacity(0.5),
+                                                        Color("NeomorphBG3").opacity(1),
                                                         Color("NeomorphBG2")
                                                     ]),
                                                     startPoint: .top,
                                                     endPoint: .bottom
                                                 )
                                             )
+                                            .cornerRadius(10)
+                                            .padding(.horizontal)
                                             .cornerRadius(9)
                                     }
                                     .buttonStyle(BorderlessButtonStyle())
@@ -203,19 +211,22 @@ struct MainAppView: View {
 
                                     }) {
                                         Text("Graph View")
-                                            .underline(false)
-                                            .foregroundStyle(.white)
-                                            .frame(width: 56, height: 35)
+                                            .font(.headline)
+                                            .foregroundColor(.white)
+                                            .padding()
+                                            .frame(maxWidth: .infinity)
                                             .background(
                                                 LinearGradient(
                                                     gradient: Gradient(colors: [
-                                                        Color("NeomorphBG3").opacity(0.5),
+                                                        Color("NeomorphBG3").opacity(1),
                                                         Color("NeomorphBG2")
                                                     ]),
                                                     startPoint: .top,
                                                     endPoint: .bottom
                                                 )
                                             )
+                                            .cornerRadius(10)
+                                            .padding(.horizontal)
                                             .cornerRadius(9)
                                        
                                         
@@ -231,7 +242,7 @@ struct MainAppView: View {
                                     
                                     Button(action: {
 //                                        vm.saveUserData()
-                                        exerciseModel.deleteAllExercises()
+//                                        exerciseModel.deleteAllExercises()
                                     }) {
                                         Text("delete")
                                             .underline(false)
@@ -260,9 +271,15 @@ struct MainAppView: View {
                                         .foregroundColor(Color("NeomorphBG4").opacity(0.7))
                                         .frame(width: 68, height: 48)
                                     
-                                    NavigationLink(destination: WorkoutsListView()) {
-                                                   Text("Go to ExercisesView")
-                                               }
+                                    if let block = block, let realID = block.blockID {
+                                        NavigationLink(
+                                            destination: BlockWorkoutsListView(blockTitle: block.title)
+                                        ) {
+                                            Text("Go to ExercisesView")
+                                        }
+                                    } else {
+                                        Text("No block available")
+                                    }
                                 }
                             }
                         }

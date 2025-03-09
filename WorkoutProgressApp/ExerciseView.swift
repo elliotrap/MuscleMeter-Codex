@@ -12,6 +12,9 @@ struct ExercisesView: View {
     @ObservedObject var viewModel: ExerciseViewModel
     @State private var showAddExercise = false
 
+    // Track which exercise is currently being moved
+    @State private var selectedToMove: Exercise? = nil
+    
     init(workoutID: CKRecord.ID) {
         self.viewModel = ExerciseViewModel(workoutID: workoutID)
     }
@@ -43,7 +46,7 @@ struct ExercisesView: View {
                         if viewModel.exercises.isEmpty {
                             let dummy1 = Exercise(
                                 recordID: nil,
-                                name: "Bench Press",
+                                name: "Knelling Lat Pulldowns (wide grip) do extra",
                                 sets: 3,
                                 reps: 10,
                                 setWeights: [100, 105, 110],
@@ -52,7 +55,8 @@ struct ExercisesView: View {
                                 exerciseNote: "Focus on form.",
                                 setActualReps: [10, 10, 10],
                                 timestamp: Date(),
-                                accentColorHex: "#0000FF"
+                                accentColorHex: "#0000FF",
+                                sortIndex: 0
                             )
                             let dummy2 = Exercise(
                                 recordID: nil,
@@ -65,16 +69,19 @@ struct ExercisesView: View {
                                 exerciseNote: "Keep your back straight.",
                                 setActualReps: [12, 12, 10],
                                 timestamp: Date(),
-                                accentColorHex: "#0000FF"
+                                accentColorHex: "#0000FF",
+                                sortIndex: 1
                             )
                             
                             viewModel.exercises = [dummy1, dummy2]
                         }
                     }
                     .sheet(isPresented: $showAddExercise) {
-                        AddExerciseView(viewModel: viewModel)
-                            .presentationDetents([.fraction(0.4)])
-                            .presentationDragIndicator(.visible)
+                        NavigationView {
+                            AddExerciseView(viewModel: viewModel)
+                                .presentationDetents([.fraction(0.4)])
+                                .presentationDragIndicator(.visible)
+                        }
                     }
                 
             }
@@ -97,19 +104,65 @@ struct ExercisesView: View {
             .padding()
     }
     
+    
     private var exercisesListView: some View {
         ScrollView {
             VStack(spacing: 16) {
-                ForEach(viewModel.exercises, id: \.id) { exercise in
-                    ExerciseCardView(
-                        exercise: exercise,
-                        evm: viewModel,
-                        subLevelProgress: { (ExperienceLevel.noob, ExperienceLevel.intermediate, 0.3) } // Extra argument 'subLevelProgress' in call
-                    )
+                // ForEach over the entire array
+                ForEach(Array(viewModel.exercises.enumerated()), id: \.element.id) { (index, exercise) in
+                    VStack(spacing: 4) {
+                        if let moving = selectedToMove, moving.id != exercise.id {
+                            Button {
+                                moveExercise(moving: moving, newIndex: index)
+                            } label: {
+                                Image(systemName: "plus.circle")
+                                    .font(.title)
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        
+                        ExerciseCardView(
+                            exercise: exercise,
+                            evm: viewModel,
+                            onRequestMove: { ex in
+                                selectedToMove = ex
+                                print("DEBUG: onRequestMove called for \(ex.name)")
+                            }
+                        )
+                        
+                        if let moving = selectedToMove, moving.id != exercise.id {
+                            Button {
+                                moveExercise(moving: moving, newIndex: index + 1)
+                            } label: {
+                                Image(systemName: "plus.circle")
+                                    .font(.title)
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                    }
                 }
             }
             .padding(.top)
         }
+        .onAppear {
+            viewModel.fetchExercises()
+        }
+    }
+    private func moveExercise(moving: Exercise, newIndex: Int) {
+        // 1) Find oldIndex in the global array
+        guard let oldIndex = viewModel.exercises.firstIndex(where: { $0.id == moving.id }) else {
+            print("DEBUG: Could not find moving exercise in global array.")
+            return
+        }
+        
+        // 2) Reorder locally
+        viewModel.reorderExercise(oldIndex: oldIndex, newIndex: newIndex)
+        
+        // 3) Push to CloudKit
+        viewModel.updateAllSortIndicesInCloudKit()
+        
+        // 4) Clear the selection so we hide plus icons
+        selectedToMove = nil
     }
 }
 
@@ -125,14 +178,11 @@ struct AddExerciseView: View {
     @State private var repsText = ""
 
     var body: some View {
-
             Form {
                 Section(header: Text("Exercise Details")) {
                     TextField("Exercise name", text: $exerciseName)
-                    
                     TextField("Sets", text: $setsText)
                         .keyboardType(.numberPad)
-                    
                     TextField("Reps", text: $repsText)
                         .keyboardType(.numberPad)
                 }
@@ -152,18 +202,16 @@ struct AddExerciseView: View {
                             let reps = Int(repsText)
                         else { return }
                         
-                        // Build arrays for each set
-                        let setWeights = Array(repeating: 0.0, count: sets)      // All 0.0 by default
-                        let setCompletions = Array(repeating: false, count: sets) // All false by default
+                        let setWeights = Array(repeating: 0.0, count: sets)
+                        let setCompletions = Array(repeating: false, count: sets)
                         
                         viewModel.addExercise(
                             name: exerciseName,
                             sets: sets,
                             reps: reps,
-                            setWeights: setWeights, // Missing argument for parameter 'exerciseNote' in call
+                            setWeights: setWeights,
                             setCompletions: setCompletions
                         )
-                        
                         dismiss()
                     }
                 }
@@ -193,11 +241,13 @@ struct ExerciseCardView: View {
     @State private var noteHeight: CGFloat = 0
     @State private var nameHeight: CGFloat = 0
 
-    // A closure returning (currentLevel, nextLevel, fraction)
-    let subLevelProgress: () -> (ExperienceLevel, ExperienceLevel?, Double)
+
     var rectangleProgress: CGFloat = 0.01
     var cornerRadius: CGFloat = 15
     var cardWidth: CGFloat = 336
+    
+    // A callback for moving the exercise (optional)
+    let onRequestMove: ((Exercise) -> Void)?
     
     // Determine the accent color from the stored hex.
     var accentColor: Color {
@@ -206,7 +256,7 @@ struct ExerciseCardView: View {
     
     @State private var localAccentColor: Color = .blue
 
-    
+
     // State variable to trigger the deletion confirmation alert.
      @State private var showDeleteConfirmation = false
     
@@ -223,18 +273,19 @@ struct ExerciseCardView: View {
     init(
         exercise: Exercise,
         evm: ExerciseViewModel,
-        subLevelProgress: @escaping () -> (ExperienceLevel, ExperienceLevel?, Double),
         rectangleProgress: CGFloat = 0.05,
         cornerRadius: CGFloat = 15,
-        cardWidth: CGFloat = 336
+        cardWidth: CGFloat = 336,
+        onRequestMove: ((Exercise) -> Void)? = nil
+
     ) {
         self.exercise = exercise
         self.evm = evm
-        self.subLevelProgress = subLevelProgress
         self.rectangleProgress = rectangleProgress
         self.cornerRadius = cornerRadius
         self.cardWidth = cardWidth
-        
+        self.onRequestMove = onRequestMove
+
         // Initialize the boolean array based on setActualReps
         // If actualReps[i] != 0, we show the text field. If 0, show the plus icon.
         _isTextFieldVisible = State(initialValue: exercise.setActualReps.map { $0 != 0 })
@@ -245,7 +296,6 @@ struct ExerciseCardView: View {
             
             if isEditing {
                 
-                let (currentLevel, _, fraction) = subLevelProgress()
                 // 2) dynamicHeight based on setWeights
                 ZStack(alignment: .center) {
                     // 1) Background shape with accent color
@@ -282,6 +332,13 @@ struct ExerciseCardView: View {
                             
                             Spacer()
                                 .frame(width: 200)
+                            
+                            Button("Move Exercise") {
+                                   print("DEBUG: 'Move Exercise' tapped for \(exercise.name)")
+                                   onRequestMove?(exercise)
+                               }
+                               .padding(.top, 8)
+                            
                             Button {
                                 showDeleteConfirmation = true
                             } label: {
@@ -332,7 +389,6 @@ struct ExerciseCardView: View {
                     }
                 }
             } else {
-                let (currentLevel, _, fraction) = subLevelProgress()
                 let dynamicHeight = 80.0
                     + Double(exercise.setWeights.count) * 80.0
                     + Double(noteHeight)
@@ -371,65 +427,28 @@ struct ExerciseCardView: View {
                     }
                 }
                 .overlay(alignment: .topLeading) {
-                    HStack {
-                        // -- Multi-line exercise name
-                        Text(exercise.name)
-                            .font(.title3)
-                            .bold()
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: cardWidth - 150)
-                            .padding(.horizontal, 2)
-                            .padding(.vertical, 6)
-                            .background(
-                                CustomRoundedRectangle4(
-                                    topLeftRadius: 0,
-                                    topRightRadius: 20,
-                                    bottomLeftRadius: 0,
-                                    bottomRightRadius: 0
-                                )
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(stops: [
-                                            // 0% to 80%: first color at full opacity
-                                            .init(color: Color("NeomorphBG2").opacity(1), location: 0.0),
-                                            .init(color: Color("NeomorphBG2").opacity(0.35), location: 0.9),
-                                            // 80% to 100%: fade from first color to transparent
-                                            .init(color: Color("NeomorphBG2").opacity(0), location: 1.0)
-                                        ]),
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-                                .frame(width: 325, height: 60)
-                                .padding(.leading, 170)
-                                .padding(.top, 5)
-                                
-                                
-                                
-                            )
-                            .measureHeight(using: NameHeightPreferenceKey.self)
-                            .onPreferenceChange(NameHeightPreferenceKey.self) { newValue in
-                                nameHeight = newValue
+                    VStack(spacing: 0) {
+                        // Exercise name view with integrated gear icon
+                        ExerciseNameView(
+                            name: exercise.name,
+                            fixedWidth: 328,  // Set your desired fixed width
+                            nameHeight: $nameHeight,
+                            action: {
+                                editedName = exercise.name
+                                editedSets = exercise.sets
+                                isEditing = true
                             }
-                            .padding(.leading, 10)
-                            .padding(.top, 17)
+                        )
+                        .padding(.leading, 48)
+                        .padding(.top, 7)
+
+                        // Add space for the rest of your content
+                        Spacer().frame(height: nameHeight)
                         
-                        Button {
-                            editedName = exercise.name
-                            editedSets = exercise.sets
-                            isEditing = true
-                        } label: {
-                            Image(systemName: "gear").opacity(0.7)
-                                .foregroundColor(.white)
-                        }
-                        .buttonStyle(.borderless)
-                        
-                        .padding(.leading, 100)
-                        .padding(.top, 17)
-                        
+                        // Rest of your exercise content below the name
+                        // ...
                     }
+                    .frame(width: cardWidth)
                 }
             }
         }
@@ -441,7 +460,16 @@ struct ExerciseCardView: View {
                 .presentationDragIndicator(.visible)
             }
     }
-    
+    func calculateTextHeight(text: String, width: CGFloat, font: UIFont) -> CGFloat {
+        let constraintRect = CGSize(width: width, height: .greatestFiniteMagnitude)
+        let boundingBox = text.boundingRect(
+            with: constraintRect,
+            options: .usesLineFragmentOrigin,
+            attributes: [NSAttributedString.Key.font: font],
+            context: nil
+        )
+        return ceil(boundingBox.height)
+    }
     
     /// Makes sure isTextFieldVisible has the same count as the current number of sets.
     private func syncTextFieldVisibility(with newCount: Int) {
@@ -460,6 +488,99 @@ struct ExerciseCardView: View {
             #selector(UIResponder.resignFirstResponder),
             to: nil, from: nil, for: nil
         )
+    }
+}
+
+struct ExerciseNameView: View {
+    let name: String
+    let fixedWidth: CGFloat
+    @Binding var nameHeight: CGFloat
+    let verticalPadding: CGFloat = 6
+    let extraHeight: CGFloat = 20
+    let iconSpace: CGFloat = 45
+    let minHeight: CGFloat = 40
+    let action: () -> Void
+    
+    var body: some View {
+        ZStack(alignment: .leading) {
+            // Text measurement view
+            Text(name)
+                .font(.title3)
+                .bold()
+                .foregroundColor(.clear)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, verticalPadding)
+                .padding(.leading, 14) // Increased left padding for measurement
+                .padding(.trailing, 4)
+                .frame(width: fixedWidth - iconSpace - 8, alignment: .leading)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear
+                            .onAppear {
+                                nameHeight = max(geo.size.height + extraHeight, minHeight)
+                            }
+                            .onChange(of: geo.size) { newSize in
+                                nameHeight = max(newSize.height + extraHeight, minHeight)
+                            }
+                            .onChange(of: name) { _ in
+                                DispatchQueue.main.async {
+                                    nameHeight = max(geo.size.height + extraHeight, minHeight)
+                                }
+                            }
+                    }
+                )
+            
+            // Background shape
+            CustomRoundedRectangle4(
+                topLeftRadius: 0,
+                topRightRadius: 20,
+                bottomLeftRadius: 0,
+                bottomRightRadius: 0
+            )
+            .fill(
+                LinearGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: Color("NeomorphBG2").opacity(1), location: 0.0),
+                        .init(color: Color("NeomorphBG2").opacity(0.35), location: 0.9),
+                        .init(color: Color("NeomorphBG2").opacity(0), location: 1.0)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: fixedWidth, height: nameHeight)
+            
+            // Content with text and icon
+            HStack(spacing: 0) {
+                // Add extra padding at the beginning
+                Spacer(minLength: 10) // Add 10 points of space at the start
+                
+                // Actual visible text
+                Text(name)
+                    .font(.title3)
+                    .bold()
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, verticalPadding)
+                    .padding(.horizontal, 4)
+                    .frame(maxWidth: fixedWidth - iconSpace - 10, alignment: .leading) // Adjusted width to account for left padding
+                
+                Spacer(minLength: 0)
+                
+                // Gear icon remains in the same position
+                Button(action: action) {
+                    Image(systemName: "gear")
+                        .opacity(0.7)
+                        .foregroundColor(.white)
+                        .frame(width: iconSpace - 8, height: iconSpace - 8)
+                        .padding(.trailing, 4)
+                }
+                .buttonStyle(.borderless)
+            }
+            .frame(width: fixedWidth)
+        }
     }
 }
 
@@ -622,7 +743,8 @@ struct SetRowView: View {
                     .keyboardType(.decimalPad)
                     .foregroundColor(.white)
                     .frame(width: 40, height: 30)
-                
+                    .focused($focusedField, equals: index)
+
                 // 2) Actual Reps Container
                 ZStack {
                     // This invisible container is always the same width
@@ -732,19 +854,22 @@ struct SetRowView: View {
         }
         // Present the note editor sheet.
         .sheet(isPresented: $showNoteEditor) {
-            NoteEditorView(note: $localNote, onSave: {
-                // When saving, update the note for this set.
-                if let recordID = exercise.recordID {
-                    var updatedNotes = exercise.setNotes
-                    if updatedNotes.indices.contains(index) {
-                        updatedNotes[index] = localNote
-                    } else {
-                        updatedNotes.append(localNote)
+            NavigationView {
+                NoteEditorView(note: $localNote, onSave: {
+                    // When saving, update the note for this set.
+                    if let recordID = exercise.recordID {
+                        var updatedNotes = exercise.setNotes
+                        if updatedNotes.indices.contains(index) {
+                            updatedNotes[index] = localNote
+                        } else {
+                            updatedNotes.append(localNote)
+                        }
+                        evm.updateExercise(recordID: recordID, newSetNotes: updatedNotes)
                     }
-                    evm.updateExercise(recordID: recordID, newSetNotes: updatedNotes)
                 }
+                )
+
             }
-            )
             .presentationDetents([.fraction(0.5)])
             .presentationDragIndicator(.visible)
         }
@@ -858,11 +983,13 @@ struct ExerciseNoteView: View {
         }
         .padding(.vertical, 10)
         .sheet(isPresented: $showNoteEditor) {
-            NoteEditorView(note: $localNote, onSave: {
-                if let recordID = exercise.recordID {
-                    evm.updateExercise(recordID: recordID, newNote: localNote)
-                }
-            })
+            NavigationView {
+                NoteEditorView(note: $localNote, onSave: {
+                    if let recordID = exercise.recordID {
+                        evm.updateExercise(recordID: recordID, newNote: localNote)
+                    }
+                })
+            }
             .presentationDetents([.fraction(0.5)])
             .presentationDragIndicator(.visible)
         }
