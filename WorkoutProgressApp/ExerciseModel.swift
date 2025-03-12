@@ -18,7 +18,7 @@ struct Exercise: Identifiable {
     var name: String
     var sets: Int
     var reps: Int
-    var setWeights: [Double] // this is set weights
+    var setWeights: [Double]
     var setCompletions: [Bool]
     var setNotes: [String]
     var exerciseNote: String
@@ -154,6 +154,83 @@ class ExerciseViewModel: ObservableObject {
                     completion(.success(savedRecord))
                 }
             }
+        }
+    }
+    
+    // MARK: - Exercise Sort Index Update Function
+    // Add this to your ExerciseViewModel class
+    func updateExerciseSortIndices(_ exercises: [Exercise]) {
+        // Create an operation group for fetching all records first
+        let group = DispatchGroup()
+        var recordsToUpdate: [(CKRecord, Int)] = []
+        var hadError = false
+        
+        print("DEBUG: Beginning to update sort indices for \(exercises.count) exercises")
+        
+        // First fetch all records
+        for (newIndex, exercise) in exercises.enumerated() {
+            // Skip exercises that don't have a recordID yet (locally created exercises)
+            guard let recordID = exercise.recordID else {
+                print("WARNING: Exercise \(exercise.name) has no recordID, skipping")
+                continue
+            }
+            
+            group.enter()
+            
+            privateDatabase.fetch(withRecordID: recordID) { record, error in
+                defer { group.leave() }
+                
+                if let error = error {
+                    print("Error fetching exercise record: \(error.localizedDescription)")
+                    hadError = true
+                    return
+                }
+                
+                if let record = record {
+                    // Store record with its new index
+                    recordsToUpdate.append((record, newIndex))
+                }
+            }
+        }
+        
+        // After all fetches complete, update and save all records in a batch
+        group.notify(queue: .main) {
+            if hadError {
+                print("ERROR: Had errors fetching exercise records")
+                return
+            }
+            
+            // Create a batch operation for better performance
+            var recordsToSave: [CKRecord] = []
+            
+            for (record, newIndex) in recordsToUpdate {
+                record["sortIndex"] = newIndex as CKRecordValue
+                recordsToSave.append(record)
+            }
+            
+            if recordsToSave.isEmpty {
+                print("DEBUG: No exercise records to update")
+                return
+            }
+            
+            let operation = CKModifyRecordsOperation(recordsToSave: recordsToSave, recordIDsToDelete: nil)
+            operation.savePolicy = .changedKeys
+            
+            operation.modifyRecordsCompletionBlock = { savedRecords, _, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("Error batch updating exercise indices: \(error.localizedDescription)")
+                        return
+                    }
+                    
+                    print("Successfully updated \(savedRecords?.count ?? 0) exercise indices")
+                    
+                    // Notify any observers of the change
+                    self.objectWillChange.send()
+                }
+            }
+            
+            self.privateDatabase.add(operation)
         }
     }
     

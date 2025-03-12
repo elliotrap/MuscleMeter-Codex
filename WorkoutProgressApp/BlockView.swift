@@ -30,7 +30,7 @@ struct BlocksTabView: View {
       }
     
     var body: some View {
-        VStack {
+        VStack(spacing: 0) {
             if blockManager.blocks.isEmpty {
                   Text("No blocks available")
                       .font(.headline)
@@ -64,36 +64,53 @@ struct BlocksTabView: View {
                       .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
                       
                   }
-                  .frame(height: 360)
+                  .frame(width: 400, height: 400)
               }
             
-            // Button to add a new block
+            ZStack {
+                RoundedRectangle(cornerRadius: 7)
+                .fill(Color.gray.opacity(0.12))
+                .frame(maxWidth: 500)
+                .frame(height: 60)
+                .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 2)
+                
             Button(action: {
                 showAddBlockSheet = true
             }) {
-                Text("Add Block")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color("NeomorphBG2").opacity(1),
-                                Color("NeomorphBG2").opacity(0.5)
-                            ]),
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .cornerRadius(10)
-                    .padding(.horizontal)
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.white)
+                    
+                    Text("Add Block")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundColor(.white)
+                        .underline(false)
+                        
+                }
+                .padding(.horizontal, 100)
+                .padding(.vertical, 12)
+                .background(
+ 
+                        RoundedRectangle(cornerRadius: 17)
+                            .fill(Color.green.opacity(0.5))
+
+                )
+                .shadow(color: Color.black.opacity(0.15), radius: 3, x: 0, y: 2)
             }
+            .buttonStyle(.borderless)
+                
+      
+            }
+            .padding(16)
+            .offset(x: 0, y: 5)
         }
         
         .navigationTitle("Blocks")
         .sheet(isPresented: $showAddBlockSheet) {
             AddBlockView(blockManager: blockManager)
+                .presentationDetents([.fraction(0.4)])
+                .presentationDragIndicator(.visible)
         }
         .onAppear {
             blockManager.fetchBlocks()
@@ -121,8 +138,7 @@ struct BlockCardView: View {
         ZStack {
             if isEditing {
                 // In editing mode, the entire card displays a "Delete Block" button.
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.blue)
+                BlockCustomRoundedRectangle()
                     .overlay(
                         Button(action: {
                             withAnimation {
@@ -136,6 +152,7 @@ struct BlockCardView: View {
                                 .padding()
                         }
                     )
+                 
             } else {
                 
                 // If NOT editing, the entire card is a NavigationLink.
@@ -148,6 +165,9 @@ struct BlockCardView: View {
                                 Text(block.title)
                                     .font(.title)
                                     .foregroundColor(.white)
+                                    .frame(width: 200) // Set your desired maximum width
+                                    .lineLimit(3) // Allow up to 3 lines (adjust as needed)
+                                    .multilineTextAlignment(.center) // Center the text
                             }
                         )
                 }                // Use a plain button style so the entire rectangle is clickable.
@@ -156,19 +176,27 @@ struct BlockCardView: View {
             
             // Gear icon in the top-right corner
             VStack {
+    
+
                 HStack {
                     Spacer()
+                        .frame(width: 200)
                     Button(action: {
                         withAnimation {
                             isEditing.toggle()
                         }
                     }) {
-                        Image(systemName: "gearshape")
-                            .foregroundColor(.white)
-                            .padding(10)
+                        Image(systemName: isEditing ? "x.circle" : "gearshape")
+                            .resizable()
+                            .frame(width: 20, height: 20)
+                            .opacity(0.7)
+                            .foregroundColor(.white)                            .padding(10)
+                        
                     }
+                    .buttonStyle(.borderless)
                 }
                 Spacer()
+                    .frame(height: 200)
             }
         }
         .rotation3DEffect(
@@ -186,68 +214,119 @@ struct BlockCardView: View {
 struct AddBlockView: View {
     @Environment(\.dismiss) var dismiss
     @State private var blockTitle: String = ""
+    @FocusState private var isTextFieldFocused: Bool
     var blockManager: WorkoutBlockManager
 
     var body: some View {
-            VStack(spacing: 20) {
+        VStack(spacing: 0) {
+            // Title area with proper spacing
+            Text("New Block")
+                .font(.title)
+                .padding(.top, 30)
+                .padding(.bottom, 20)
+            
+            // Form area
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Block Details")
+                    .font(.headline)
+                    .padding(.leading, 5)
+                
                 TextField("Enter block name", text: $blockTitle)
                     .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-                    .padding(.horizontal)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
+                    .focused($isTextFieldFocused)
+            }
+            .padding(.horizontal, 20)
+            
+            Spacer().frame(height: 40)
+            
+            // Save button
+            ZStack {
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(Color.gray.opacity(0.12))
+                    .frame(maxWidth: 350)
+                    .frame(height: 60)
+                    .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 2)
                 
                 Button(action: {
-                    // Only save if the title isn't empty.
                     if !blockTitle.isEmpty {
                         blockManager.addBlock(title: blockTitle)
                         dismiss()
                     }
                 }) {
-                    Text("Save Block")
-                        .foregroundColor(.white)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(blockTitle.isEmpty ? Color.gray : Color.blue)
-                        .cornerRadius(10)
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(.white)
+                        
+                        Text("Save Block")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 100)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 17)
+                            .fill(blockTitle.isEmpty ? Color.gray.opacity(0.5) : Color.blue.opacity(0.5))
+                    )
+                    .shadow(color: Color.black.opacity(0.15), radius: 3, x: 0, y: 2)
                 }
+                .buttonStyle(.borderless)
                 .disabled(blockTitle.isEmpty)
-                
-                Spacer()
             }
-            .navigationBarTitle("New Block", displayMode: .inline)
-            .navigationBarItems(leading: Button("Cancel") {
-                dismiss()
-            })
+            
+            Spacer()
+        }
+        .padding(.bottom, 20)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Cancel") {
+                    dismiss()
+                }
+            }
+            
+            ToolbarItem(placement: .keyboard) {
+                Button("Done") {
+                    isTextFieldFocused = false
+                }
+            }
+        }
+        .ignoresSafeArea(.keyboard)
     }
 }
 
-//struct AddBlockView_Previews: PreviewProvider {
+struct AddBlockView_Previews: PreviewProvider {
+    static var previews: some View {
+        // For preview purposes, we'll inject a dummy manager with sample blocks.
+        let dummyManager = WorkoutBlockManager()
+        dummyManager.blocks = [
+            WorkoutBlock(title: "Upper Body"),
+            WorkoutBlock(title: "Lower Body")
+        ]
+        return AddBlockView(blockManager: dummyManager)
+    }
+}
+
+//struct BlocksTabView_Previews: PreviewProvider {
 //    static var previews: some View {
-//        // For preview purposes, we'll inject a dummy manager with sample blocks.
+//        // Create a dummy manager with sample blocks for the preview.
 //        let dummyManager = WorkoutBlockManager()
 //        dummyManager.blocks = [
-//            WorkoutBlock(title: "Upper Body"),
-//            WorkoutBlock(title: "Lower Body")
+//            WorkoutBlock(title: "Heavy"),
+//            WorkoutBlock(title: "Moderate"),
+//            WorkoutBlock(title: "Light")
 //        ]
-//        return AddBlockView(blockManager: dummyManager)
+//        return BlocksTabView()
+//            .environmentObject(dummyManager)
+//
 //    }
 //}
 
-struct BlocksTabView_Previews: PreviewProvider {
-    static var previews: some View {
-        // Create a dummy manager with sample blocks for the preview.
-        let dummyManager = WorkoutBlockManager()
-        dummyManager.blocks = [
-            WorkoutBlock(title: "Heavy"),
-            WorkoutBlock(title: "Moderate"),
-            WorkoutBlock(title: "Light")
-        ]
-        return BlocksTabView()
-            .environmentObject(dummyManager)
-
+#Preview {
+    NavigationView {
+        MainMenuView()
+            .environmentObject(WorkoutViewModel())
+            .environmentObject(WorkoutBlockManager.withSampleData())
     }
 }
-
-//#Preview {
-//    MainMenuView()
-//}

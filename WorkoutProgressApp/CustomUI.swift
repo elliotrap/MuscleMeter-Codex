@@ -397,7 +397,6 @@ struct ExerciseCustomRoundedRectangle: View {
             VStack {
     
                 // MARK: - The partial glow background
-                // Here, you can also switch to a rainbow if freak:
                 HStack {
                     RoundedRectangle(cornerRadius: 50)
                         .fill(
@@ -452,6 +451,19 @@ struct WorkoutCustomRoundedRectangle: View {
     
     var body: some View {
         ZStack {
+            
+            // MARK: - The partial glow background
+            VStack {
+                Spacer().frame(height: 100)
+
+                RoundedRectangle(cornerRadius: 50)
+                    .fill(
+                        AnyShapeStyle(accentColor.opacity(0.35))
+                    )
+                    .frame(width: width + 50, height: 55)
+                    .blur(radius: 20)
+                
+            }
             // Outline shape
             RoundedRectangle(cornerRadius: 20)
                 .stroke(lineWidth: 5)
@@ -1057,5 +1069,5 @@ struct RepsField: View {
 
 
 #Preview {
-    BlockCustomRoundedRectangle()
+    WorkoutCustomRoundedRectangle()
 }

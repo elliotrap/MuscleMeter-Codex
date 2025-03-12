@@ -9,8 +9,13 @@ import SwiftUI
 
 @main
 struct WorkoutProgressApp: App {
-    
+    // Use sample data in DEBUG mode, empty in production
+    #if DEBUG
+    @StateObject var blockManager = WorkoutBlockManager.withSampleData()
+    #else
     @StateObject var blockManager = WorkoutBlockManager()
+    #endif
+    
     @StateObject var workoutViewModel = WorkoutViewModel()
     @State private var isLoading = true
     
@@ -20,7 +25,6 @@ struct WorkoutProgressApp: App {
                 if isLoading {
                     LoadingView()
                         .onAppear {
-                            // Simulate load for 2 seconds, then continue
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                                 isLoading = false
                             }
@@ -35,6 +39,19 @@ struct WorkoutProgressApp: App {
             .environmentObject(blockManager)
             .environmentObject(workoutViewModel)
         }
+    }
+}
+
+// Add this extension to your WorkoutBlockManager
+extension WorkoutBlockManager {
+    static func withSampleData() -> WorkoutBlockManager {
+        let manager = WorkoutBlockManager()
+        manager.blocks = [
+            WorkoutBlock(title: "Heavy"),
+            WorkoutBlock(title: "Moderate"),
+            WorkoutBlock(title: "Light")
+        ]
+        return manager
     }
 }
 

@@ -41,7 +41,7 @@ struct AllWorkoutsListView: View {
             .ignoresSafeArea()
             
             ScrollView {
-                LazyVStack(spacing: 16) {
+                LazyVStack(spacing: 56) {
                     // Iterate over each group
                     ForEach(sortedGroups, id: \.key) { group in
                         Section(header:
@@ -109,9 +109,10 @@ struct AllWorkoutsListView: View {
                     AddWorkoutView(
                         providedBlockTitle: nil     // user can type a block name
                     )
+                    .presentationDetents([.fraction(0.4)])
+                    .presentationDragIndicator(.visible)
                 }
-                .presentationDetents([.fraction(0.4)])
-                .presentationDragIndicator(.visible)
+        
             }
         .sheet(isPresented: $showColorPicker) {
             colorPickerSheet
@@ -177,192 +178,8 @@ struct AllWorkoutsListView: View {
             workoutViewModel.workouts = [dummy1, dummy2]
         }
     }
-    
-    
-    /// Moves the given workout to the specified index in the workouts array.
-    private func moveWorkout(_ workout: WorkoutModel, toIndex newIndex: Int) {
-        guard let oldIndex = workoutViewModel.workouts.firstIndex(where: { $0.id == workout.id }) else {
-            print("DEBUG: Could not find old index for \(workout.name)")
-            return
-        }
-        
-        print("DEBUG: Moving \(workout.name) from \(oldIndex) to \(newIndex)")
-        
-        // 1) Remove the item first
-        let item = workoutViewModel.workouts.remove(at: oldIndex)
-        
-        // 2) Adjust the insertion index if oldIndex < newIndex
-        var finalIndex = newIndex
-        if oldIndex < newIndex {
-            finalIndex -= 1
-        }
-        
-        // 3) Clamp finalIndex to 0...workoutViewModel.workouts.count
-        //    In Swift, insert(at:) is valid from 0 up to .count (inclusive) to append.
-        finalIndex = max(0, min(finalIndex, workoutViewModel.workouts.count))
-        
-        // 4) Insert the item at the adjusted/clamped index
-        workoutViewModel.workouts.insert(item, at: finalIndex)
-        print("DEBUG: \(workout.name) moved in local array to index \(finalIndex).")
-        
-        // 5) Clear the selectedToMove to exit "move mode"
-        selectedToMove = nil
-    }
 }
 
-
-import SwiftUI
-
-//struct BlockWorkoutsListView: View {
-//    let blockTitle: String  // Use the block name to filter workouts
-//    
-//    @EnvironmentObject var workoutViewModel: WorkoutViewModel
-//    @State private var showAddWorkoutSheet = false
-//    
-//    // For color picker
-//    @State private var showColorPicker = false
-//    @State private var selectedAccentColor: Color = .blue
-//    @State private var selectedWorkout: WorkoutModel? = nil
-//    
-//    // Tracks which workout is currently being moved, if any.
-//    @State private var selectedToMove: WorkoutModel? = nil
-//    
-//    // A unique ID to force SwiftUI to re-render when needed.
-//    @State private var refreshID = UUID()
-//    
-//    /// Workouts that belong to this block (i.e. have the matching sectionTitle),
-//    /// sorted by their sortIndex.
-//    private var workoutsForBlock: [WorkoutModel] {
-//        // Make sure we're getting the latest data
-//        let latestWorkouts = workoutViewModel.workouts
-//        
-//        return latestWorkouts
-//            .filter { $0.sectionTitle == blockTitle }
-//            .sorted { $0.sortIndex < $1.sortIndex }
-//    }
-//    
-//    
-//    // 1. In your view, add a specific state property for UI refresh:
-//    @State private var forceRefresh = UUID()
-//
-//    
-//    var body: some View {
-//        ZStack {
-//            // Background
-//            LinearGradient(
-//                gradient: Gradient(colors: [Color("NeomorphBG2"), Color("NeomorphBG2")]),
-//                startPoint: .top,
-//                endPoint: .bottom
-//            )
-//            .ignoresSafeArea()
-//            ScrollView {
-//                        LazyVStack(spacing: 16) {
-//                            // Optional top insertion point
-//                            if let movingWorkout = selectedToMove {
-//                                Button(action: {
-//                                    print("Tapped top plus, insert at index 0")
-//                                    workoutViewModel.moveWorkout(movingWorkout, toIndex: 0)
-//                                    selectedToMove = nil
-//                                    refreshID = UUID() // Force view refresh
-//                                }) {
-//                                    HStack {
-//                                        Image(systemName: "plus.circle")
-//                                            .font(.title)
-//                                        Text("Move \(movingWorkout.name) Here")
-//                                            .fontWeight(.medium)
-//                                    }
-//                                    .foregroundColor(.blue)
-//                                    .padding(.vertical, 8)
-//                                }
-//                                .id("top-insertion-\(refreshID)")
-//                                .padding(.horizontal, 16)
-//                            }
-//                            
-//                            // Iterate over the workouts
-//                            ForEach(Array(workoutsForBlock.enumerated()), id: \.element.id) { (localIndex, workout) in
-//                                WorkoutCardView(
-//                                    workout: workout,
-//                                    workoutViewModel: workoutViewModel,
-//                                    onColorPickerRequested: { /* ... */ },
-//                                    onWorkoutUpdated: {
-//                                        refreshID = UUID()
-//                                    },
-//                                    onRequestMove: { workout in
-//                                        selectedToMove = workout
-//                                        refreshID = UUID() // Force view refresh
-//                                    }
-//                                )
-//                                .id("\(workout.id)-\(workout.sortIndex)-\(refreshID)")
-//                                .padding(.horizontal, 16)
-//                                
-//                                // If a workout is selected to move (and it's not this one), show a plus button below
-//                                if let movingWorkout = selectedToMove, movingWorkout.id != workout.id {
-//                                    Button(action: {
-//                                        print("DEBUG: Insert below \(workout.name) at index \(localIndex + 1)")
-//                                        workoutViewModel.moveWorkout(movingWorkout, toIndex: localIndex + 1)
-//                                        selectedToMove = nil
-//                                        refreshID = UUID() // Force view refresh
-//                                    }) {
-//                                        HStack {
-//                                            Image(systemName: "plus.circle")
-//                                                .font(.title)
-//                                            Text("Move \(movingWorkout.name) Here")
-//                                                .fontWeight(.medium)
-//                                        }
-//                                        .foregroundColor(.blue)
-//                                        .padding(.vertical, 8)
-//                                    }
-//                                    .id("insertion-\(localIndex)-\(refreshID)")
-//                                    .padding(.horizontal, 16)
-//                                }
-//                            }
-//                        }
-//                        .padding(.vertical, 16)
-//                        .animation(.default, value: selectedToMove != nil)
-//                        .animation(.default, value: refreshID)
-//                        .overlay(
-//                            Group {
-//                                if workoutViewModel.isProcessingMove {
-//                                    ProgressView()
-//                                        .scaleEffect(1.5)
-//                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-//                                        .background(Color.black.opacity(0.2))
-//                                }
-//                            }
-//                        )
-//                    }
-//                    .onChange(of: workoutViewModel.workouts) { _ in
-//                        // Force UI refresh when the workouts array changes
-//                        refreshID = UUID()
-//                    }
-//            .onAppear {
-//                // Refresh global workouts when the view appears.
-//                workoutViewModel.fetchWorkouts()
-//            }
-//            .navigationTitle("\(blockTitle) Workouts")
-//            .toolbar {
-//                ToolbarItem(placement: .navigationBarTrailing) {
-//                    Button {
-//                        showAddWorkoutSheet = true
-//                    } label: {
-//                        Image(systemName: "plus")
-//                    }
-//                }
-//            }
-//            .sheet(isPresented: $showAddWorkoutSheet) {
-//                NavigationStack {
-//                    AddWorkoutView(
-//                        providedBlockTitle: blockTitle // show "Block: blockTitle" in the UI
-//                    )
-//                }
-//                .presentationDetents([.fraction(0.4)])
-//                .presentationDragIndicator(.visible)
-//            }
-//        }
-//    }
-//    
-//    
-//}
 
 // MARK: - Main View Structure
 struct BlockWorkoutsListView: View {
@@ -439,6 +256,8 @@ struct BlockWorkoutsListView: View {
         }
         .sheet(isPresented: $showAddWorkoutSheet) {
             addWorkoutSheet
+                .presentationDetents([.fraction(0.4)])
+                .presentationDragIndicator(.visible)
         }
     }
     
@@ -476,7 +295,7 @@ struct BlockWorkoutsListView: View {
     
     // MARK: - Workout List View
     private var workoutListView: some View {
-        LazyVStack(spacing: 16) {
+        LazyVStack(spacing: 26) {
             workoutCardsList
                 .animation(.default, value: selectedToMove != nil) // Using a Bool instead of the model
                 .animation(.default, value: refreshID)
@@ -484,15 +303,25 @@ struct BlockWorkoutsListView: View {
     }
 
     // MARK: - Workout Cards List with Smart Insertion Points
+    // MARK: - Movement Button Logic
     private var workoutCardsList: some View {
         VStack(spacing: 0) {
+            // If we're moving a workout, show the "move to start" button only if the workout isn't already at the start
+            if let movingWorkout = selectedToMove,
+               let currentIndex = workoutsForBlock.firstIndex(where: { $0.id == movingWorkout.id }),
+               currentIndex > 0 {
+                insertionButton(
+                    label: "Move \(movingWorkout.name) to Start",
+                    systemImage: "arrow.up.to.line",
+                    targetIndex: 0,
+                    isEndPosition: false
+                )
+                .padding(.bottom, 8)
+            }
+            
+            // List all workouts with insertion points
             ForEach(Array(workoutsForBlock.enumerated()), id: \.element.id) { (localIndex, workout) in
-                // Show insertion button BEFORE this card if appropriate
-                if shouldShowInsertionButton(before: workout, at: localIndex) {
-                    insertionButton(position: "before", workout: workout, targetIndex: localIndex)
-                }
-                
-                // The workout card itself
+                // Only show the workout card
                 WorkoutCardView(
                     workout: workout,
                     workoutViewModel: workoutViewModel,
@@ -506,62 +335,88 @@ struct BlockWorkoutsListView: View {
                     }
                 )
                 .id("\(workout.id)-\(workout.sortIndex)-\(refreshID)")
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 4)
                 
-                // Show insertion button AFTER this card if appropriate
-                if shouldShowInsertionButton(after: workout, at: localIndex) {
-                    insertionButton(position: "after", workout: workout, targetIndex: localIndex + 1)
+                // If we're moving a workout, show insertion points between workouts
+                if let movingWorkout = selectedToMove,
+                   movingWorkout.id != workout.id,
+                   localIndex < workoutsForBlock.count - 1 {
+                    let nextWorkout = workoutsForBlock[localIndex + 1]
+                    
+                    // Don't show insertion point if moving workout is already at this position
+                    if movingWorkout.id != nextWorkout.id {
+                        insertionButton(
+                            label: "Move \(movingWorkout.name) after \(workout.name)",
+                            systemImage: "arrow.down",
+                            targetIndex: localIndex + 1,
+                            isEndPosition: false
+                        )
+                    }
                 }
             }
             
-            // If we have workouts and are moving a workout, maybe show a final insertion point
-            if !workoutsForBlock.isEmpty && shouldShowFinalInsertionButton() {
-                insertionButton(position: "end", workout: nil, targetIndex: workoutsForBlock.count)
+            // If we're moving a workout, show the "move to end" button only if the workout isn't already at the end
+            if let movingWorkout = selectedToMove,
+               let currentIndex = workoutsForBlock.firstIndex(where: { $0.id == movingWorkout.id }),
+               currentIndex < workoutsForBlock.count - 1 {
+                insertionButton(
+                    label: "Move \(movingWorkout.name) to End",
+                    systemImage: "arrow.down.to.line",
+                    targetIndex: workoutsForBlock.count,  // Important: Use count, not count-1 for end position
+                    isEndPosition: true  // Flag this as an end position move
+                )
+                .padding(.top, 8)
             }
         }
     }
-
-    // MARK: - Insertion Button Logic
-    private func shouldShowInsertionButton(before workout: WorkoutModel, at index: Int) -> Bool {
-        guard let movingWorkout = selectedToMove else { return false }
-        
-        // Don't show insertion button before the workout we're trying to move
-        if movingWorkout.id == workout.id { return false }
-        
-        // Show an insertion button at the very beginning only if there's no redundant button
-        if index == 0 { return true }
-        
-        // Otherwise, only show the button before if the moving workout isn't immediately before this one
-        let movingIndex = workoutsForBlock.firstIndex(where: { $0.id == movingWorkout.id }) ?? -1
-        return movingIndex != index - 1
-    }
-
-    private func shouldShowInsertionButton(after workout: WorkoutModel, at index: Int) -> Bool {
-        guard let movingWorkout = selectedToMove else { return false }
-        
-        // Don't show insertion button after the workout we're trying to move
-        if movingWorkout.id == workout.id { return false }
-        
-        // Don't show an insertion button after the last workout - we'll handle that with the final button
-        if index == workoutsForBlock.count - 1 { return false }
-        
-        // Otherwise, only show the button after if the moving workout isn't immediately after this one
-        let movingIndex = workoutsForBlock.firstIndex(where: { $0.id == movingWorkout.id }) ?? -1
-        return movingIndex != index + 1
-    }
-
-    private func shouldShowFinalInsertionButton() -> Bool {
-        guard let movingWorkout = selectedToMove else { return false }
-        
-        // Show the final button only if we're not already moving the last workout
-        let lastIndex = workoutsForBlock.count - 1
-        if lastIndex >= 0 {
-            let lastWorkoutId = workoutsForBlock[lastIndex].id
-            return movingWorkout.id != lastWorkoutId
+    
+    // MARK: - Insertion Button View
+    private func insertionButton(label: String, systemImage: String, targetIndex: Int, isEndPosition: Bool) -> some View {
+        Button(action: {
+            guard let movingWorkout = selectedToMove else { return }
+            
+            print("DEBUG: Moving \(movingWorkout.name) to index \(targetIndex)")
+            
+            // Get current index of the moving workout
+            if let currentIndex = workoutsForBlock.firstIndex(where: { $0.id == movingWorkout.id }) {
+                print("DEBUG: Current index of \(movingWorkout.name) is \(currentIndex)")
+                
+                // Special handling for end position
+                if isEndPosition {
+                    workoutViewModel.moveWorkoutToEnd(movingWorkout)
+                } else {
+                    // Get the correct index if we need to account for removal
+                    var adjustedTargetIndex = targetIndex
+                    
+                    // If moving to a later position, we need to account for the removal of the current item
+                    if targetIndex > currentIndex {
+                        adjustedTargetIndex -= 1
+                    }
+                    
+                    // Move the workout
+                    workoutViewModel.moveWorkout(movingWorkout, toIndex: adjustedTargetIndex)
+                }
+                
+                selectedToMove = nil
+                refreshID = UUID()
+            }
+        }) {
+            HStack {
+                Image(systemName: systemImage)
+                    .font(.title3)
+                Text(label)
+                    .fontWeight(.medium)
+            }
+            .foregroundColor(.blue)
+            .padding(.vertical, 8)
         }
-        
-        return false
+        .buttonStyle(BorderedButtonStyle())
+        .id("insertion-\(targetIndex)-\(refreshID)")
+        .padding(.horizontal, 16)
     }
+
+
 
     // MARK: - Insertion Button View
     private func insertionButton(position: String, workout: WorkoutModel?, targetIndex: Int) -> AnyView {
@@ -680,7 +535,7 @@ struct WorkoutCardView: View {
                             .font(.title3)
                             .bold()
                             .foregroundColor(.white)
-                            .padding(.top, 20)
+                            .padding(.top, 30)
                         
                         Spacer()
                         
@@ -688,7 +543,7 @@ struct WorkoutCardView: View {
                             Text("Date: \(date, formatter: DateFormatter.workoutDateFormatter)")
                                 .font(.subheadline)
                                 .foregroundColor(.white.opacity(0.8))
-                                .padding(.bottom, 20)
+                                .padding(.bottom, 35)
                         }
                     }
                     .padding(.horizontal, 20)
@@ -710,8 +565,9 @@ struct WorkoutCardView: View {
                                     .clipShape(Circle())
                             }
                             .frame(width: 44, height: 44)
-                            .padding(.top, 10)
-                            .padding(.trailing, 10)
+                            .padding(.top, 20)
+                            .padding(.trailing, 30)
+                            .buttonStyle(.borderless)
                         }
                         
                         Spacer()
@@ -728,7 +584,7 @@ struct WorkoutCardView: View {
     
     private var editingView: some View {
         VStack {
-            Spacer().frame(height: 40)
+            Spacer().frame(height: 80)
             ZStack {
                 // Background
                 WorkoutCustomRoundedRectangle(
@@ -736,7 +592,7 @@ struct WorkoutCardView: View {
                     accentColor: .blue,
                     cornerRadius: 15,
                     width: 336,
-                    height: isEditing ? 200 : 120
+                    height: isEditing ? 250 : 120
                 )
                 
                 HStack(spacing: 60) {
@@ -754,7 +610,7 @@ struct WorkoutCardView: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.borderless)
-                    .offset(x: -90, y: -70)
+                    .offset(x: -90, y: -100)
                     
                     Button {
                         workoutViewModel.deleteWorkout(workout)
@@ -771,7 +627,7 @@ struct WorkoutCardView: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.borderless)
-                    .offset(x: 90, y: -70)
+                    .offset(x: 90, y: -100)
                 }
                 
                 VStack(spacing: 16) {
@@ -812,21 +668,44 @@ struct WorkoutCardView: View {
                     
                     // Example: a new "Move" button
    
-                    Button("Move Workout") {
-                        print("DEBUG: 'Move Workout' tapped for \(workout.name)")
-                        print("DEBUG: onRequestMove is nil? \((onRequestMove == nil) ? "Yes" : "No")")
-                        onRequestMove?(workout)
+                    HStack(spacing: 30) {
+                        Button("Move Workout") {
+                            print("DEBUG: 'Move Workout' tapped for \(workout.name)")
+                            print("DEBUG: onRequestMove is nil? \((onRequestMove == nil) ? "Yes" : "No")")
+                            onRequestMove?(workout)
+                        }
+                        .buttonStyle(.borderless)
+                        .padding(8)
+                        .foregroundColor(.white).opacity(0.8)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 0)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color("NeomorphBG3").opacity(0.9))
+                        )
+                        
+                        Button("Select Block") {
+                            showBlockSelectionSheet = true
+                        }
+                        .buttonStyle(.borderless)
+                        .padding(8)
+                        .foregroundColor(.white).opacity(0.8)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 0)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color("NeomorphBG3").opacity(0.9))
+                        )
+                        .sheet(isPresented: $showBlockSelectionSheet) {
+                            // Pass in the binding to selectedBlock, plus the environment object
+                            SelectBlockSheet(selectedBlock: $selectedBlock)
+                                .environmentObject(blockManager)
+                                .presentationDetents([.fraction(0.4)])
+                                .presentationDragIndicator(.visible)
+                        }
+                        
                     }
-                    .padding(.top, 8)
-                    
-                    Button("Select Block") {
-                        showBlockSelectionSheet = true
-                    }
-                    .sheet(isPresented: $showBlockSelectionSheet) {
-                        // Pass in the binding to selectedBlock, plus the environment object
-                        SelectBlockSheet(selectedBlock: $selectedBlock)
-                            .environmentObject(blockManager)
-                    }
+                    .padding(.top, 20)
                     
  
 
@@ -858,17 +737,21 @@ struct WorkoutCardView: View {
                         isEditing = false
                     }) {
                         Text("Done Editing")
+                            .padding(8)
                             .foregroundColor(.white).opacity(0.8)
                             .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 0)
                             .background(
-                                RoundedRectangle(cornerRadius: 5)
+                                RoundedRectangle(cornerRadius: 10)
                                     .fill(Color("NeomorphBG3").opacity(0.9))
                             )
                     }
+                    
                     .buttonStyle(.borderless)
-                    .offset(x: 0, y: 35)
+                    .offset(x: 0, y: 5)
                 }
+                .offset(x: 0, y: 15)
+
             }
             .frame(width: 336, height: isEditing ? 200 : 120)
             Spacer().frame(height: 40)
@@ -938,7 +821,9 @@ struct AddWorkoutView: View {
         VStack(spacing: 20) {
             // 1) Workout name text field
             TextField("Workout Name", text: $workoutName)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .padding()
+                .background(Color("NeomorphBG3").opacity(0.3))
+                .cornerRadius(10)
                 .padding(.horizontal)
             
             // 2) If no block title was provided, user can type one
@@ -954,18 +839,41 @@ struct AddWorkoutView: View {
             }
             
             // 3) Save button
+            ZStack {
+                RoundedRectangle(cornerRadius: 7)
+                .fill(Color.gray.opacity(0.12))
+                .frame(maxWidth: 350)
+                .frame(height: 60)
+                .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 2)
+                
             Button(action: {
                 saveWorkout()
+
             }) {
-                Text("Save Workout")
-                    .foregroundColor(.white)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(workoutName.isEmpty ? Color.gray : Color.blue)
-                    .cornerRadius(10)
-                    .padding(.horizontal)
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.white)
+                    
+                    Text("Save Workout")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundColor(.white)
+                        .underline(false)
+                        
+                }
+                .padding(.horizontal, 100)
+                .padding(.vertical, 12)
+                .background(
+ 
+                        RoundedRectangle(cornerRadius: 17)
+                            .fill(workoutName.isEmpty ? Color.gray.opacity(0.5) : Color.blue.opacity(0.5))
+                )
+                .shadow(color: Color.black.opacity(0.15), radius: 3, x: 0, y: 2)
             }
             .disabled(workoutName.isEmpty)
+            .buttonStyle(.borderless)
+                
+            }
             
             Spacer()
         }
@@ -1008,21 +916,7 @@ extension DateFormatter {
     }
 }
 
-//struct WorkoutCardView_Previews: PreviewProvider {
-//    static var previews: some View {
-//        WorkoutCardView(
-//            workout: WorkoutModel(
-//                id: CKRecord.ID(recordName: "DummyID"),
-//                name: "Sample Workout",
-//                date: Date()
-//            ),
-//            workoutViewModel: WorkoutViewModel()
-//        )
-//        .preferredColorScheme(.dark)   // See it in dark mode
-//        .previewLayout(.sizeThatFits) // Fit the card to its natural size
-//        .padding()
-//    }
-//}
+
 
 
 

@@ -11,36 +11,46 @@ import CloudKit
 struct MainMenuView: View {
     @State private var isAuthenticated: Bool = false
     
-   @ObservedObject var blockManager = WorkoutBlockManager()
-
+    @EnvironmentObject var blockManager: WorkoutBlockManager
+    @EnvironmentObject var workoutViewModel: WorkoutViewModel
+    
     @State private var showAddBlockSheet = false
 
 
     var body: some View {
-            VStack(spacing: 30) {
+            VStack(spacing: 0) {
+                
+                
                 BlocksTabView()
                 // Navigation link to the workouts list.
                 NavigationLink(destination: AllWorkoutsListView()
 ) {
-                    Text("Workouts List")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color("NeomorphBG2").opacity(1),
-                                    Color("NeomorphBG2").opacity(0.5)
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
+                    ZStack {
+                        // Outer rectangle - base layer
+                        RoundedRectangle(cornerRadius: 7)
+                            .fill(Color.gray.opacity(0.12))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 60)
+                            .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 2)
                         
-                        .cornerRadius(10)
-                        .padding(.horizontal)
+                        // Inner rectangle - top layer with subtle bulge effect
+                        RoundedRectangle(cornerRadius: 15)
+                            .fill(Color("NeomorphBG3").opacity(0.9))
+                            .frame(maxWidth: 310, maxHeight: 48)
+                            
+                        // Text layer
+                        Text("Workouts List")
+                            .font(.system(size: 17, weight: .medium, design: .default))
+                            .foregroundColor(Color.white)
+                            .underline(false)
+
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
                 }
+.buttonStyle(.borderless)
+
+                
      
                 
                 
@@ -55,25 +65,30 @@ struct MainMenuView: View {
                         block: defaultBlock                 // must be a WorkoutBlock? (optional)
                     )
                 ) {
-                    Text("Rank Your Weight Class")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color("NeomorphBG2").opacity(1),
-                                    Color("NeomorphBG2").opacity(0.5)
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
+                    ZStack {
+                        // Outer rectangle - base layer
+                        RoundedRectangle(cornerRadius: 7)
+                            .fill(Color.gray.opacity(0.12))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 60)
+                            .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 2)
                         
-                        )
-                        .cornerRadius(10)
-                        .padding(.horizontal)
+                        // Inner rectangle - top layer with subtle bulge effect
+                        RoundedRectangle(cornerRadius: 15)
+                            .fill(Color("NeomorphBG3").opacity(0.9))
+                            .frame(maxWidth: 310, maxHeight: 48)
+                            
+                        // Text layer
+                        Text("Rank Your Weight Class")
+                            .font(.system(size: 17, weight: .medium, design: .default))
+                            .foregroundColor(Color.white)
+                            .underline(false)
+
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
                 }
+                .buttonStyle(.borderless)
     
                 
                 
@@ -82,16 +97,15 @@ struct MainMenuView: View {
             .padding()
             .navigationTitle("Main Menu")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink(destination: MembershipCardScannerView()) {
                         Image(systemName: "creditcard")
                             .font(.title2)
                     }
                 }
             }
-            .sheet(isPresented: $showAddBlockSheet) {
-                AddBlockView(blockManager: blockManager)
-            }
+
+         
         
         .background(
             LinearGradient(
@@ -104,8 +118,13 @@ struct MainMenuView: View {
     }
 }
 
-#Preview {
 
+
+#Preview {
+    NavigationView {
         MainMenuView()
+            .environmentObject(WorkoutViewModel())
+            .environmentObject(WorkoutBlockManager.withSampleData())
     }
+}
 

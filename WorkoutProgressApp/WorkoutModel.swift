@@ -24,6 +24,8 @@ struct WorkoutModel: Identifiable {
 class WorkoutViewModel: ObservableObject {
     @Published var workouts: [WorkoutModel] = []
     
+    
+    
     @Published var isProcessingMove: Bool = false
     
     @Published var sectionTitles: [String] = ["Light", "Moderate", "Heavy", "Extra Heavy", "D-load"]
@@ -181,6 +183,7 @@ class WorkoutViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Updated moveWorkout function
     func moveWorkout(_ workout: WorkoutModel, toIndex newIndex: Int) {
         guard !isProcessingMove else { return } // Prevent concurrent moves
         
@@ -227,13 +230,82 @@ class WorkoutViewModel: ObservableObject {
         newFullWorkouts.append(contentsOf: updatedBlockWorkouts)
         self.workouts = newFullWorkouts
         
-        // 5. Update CloudKit in the background
+        // 5. Print the new sort order for debugging
+        print("DEBUG: New workout order:")
+        for (i, w) in updatedBlockWorkouts.enumerated() {
+            print("  \(i): \(w.name) (sortIndex: \(w.sortIndex))")
+        }
+        
+        // 6. Update CloudKit in the background
         updateWorkoutSortIndices(updatedBlockWorkouts) { success in
             DispatchQueue.main.async {
                 self.isProcessingMove = false
                 if !success {
                     print("ERROR: Failed to update workout indices in CloudKit")
                     // Consider rolling back to previous state if needed
+                } else {
+                    print("Successfully updated workout indices")
+                    self.objectWillChange.send()
+                }
+            }
+        }
+    }
+    
+    // MARK: - Special function to move a workout to the end
+    func moveWorkoutToEnd(_ workout: WorkoutModel) {
+        guard !isProcessingMove else { return }
+        
+        // Get the workouts for this specific block
+        let blockWorkouts = self.workouts
+            .filter { $0.sectionTitle == workout.sectionTitle }
+            .sorted(by: { $0.sortIndex < $1.sortIndex })
+        
+        // Find the current index of the workout
+        guard let currentIndex = blockWorkouts.firstIndex(where: { $0.id == workout.id }) else {
+            print("ERROR: Could not find workout in the block")
+            return
+        }
+        
+        let lastIndex = blockWorkouts.count - 1
+        print("DEBUG: Moving \(workout.name) from \(currentIndex) to end position (index \(lastIndex))")
+        
+        // Don't do anything if already at the end
+        if currentIndex == lastIndex {
+            print("DEBUG: Workout is already at the end, no need to move")
+            return
+        }
+        
+        isProcessingMove = true
+        
+        // 1. Create a copy of block workouts and remove the workout being moved
+        var updatedBlockWorkouts = blockWorkouts
+        let workoutToMove = updatedBlockWorkouts.remove(at: currentIndex)
+        
+        // 2. Add the workout to the end
+        updatedBlockWorkouts.append(workoutToMove)
+        
+        // 3. Update all sort indices in the array
+        for index in 0..<updatedBlockWorkouts.count {
+            updatedBlockWorkouts[index].sortIndex = index
+        }
+        
+        // 4. Update the local workouts array
+        var newFullWorkouts = self.workouts.filter { $0.sectionTitle != workout.sectionTitle }
+        newFullWorkouts.append(contentsOf: updatedBlockWorkouts)
+        self.workouts = newFullWorkouts
+        
+        // 5. Print the new sort order for debugging
+        print("DEBUG: New workout order:")
+        for (i, w) in updatedBlockWorkouts.enumerated() {
+            print("  \(i): \(w.name) (sortIndex: \(w.sortIndex))")
+        }
+        
+        // 6. Update CloudKit
+        updateWorkoutSortIndices(updatedBlockWorkouts) { success in
+            DispatchQueue.main.async {
+                self.isProcessingMove = false
+                if !success {
+                    print("ERROR: Failed to update workout indices in CloudKit")
                 } else {
                     print("Successfully updated workout indices")
                     self.objectWillChange.send()

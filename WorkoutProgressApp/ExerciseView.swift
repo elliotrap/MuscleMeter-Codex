@@ -11,80 +11,89 @@ import CloudKit
 struct ExercisesView: View {
     @ObservedObject var viewModel: ExerciseViewModel
     @State private var showAddExercise = false
-
+    
+    // A unique ID to force SwiftUI to re-render when needed.
+    @State private var refreshID = UUID()
+    
     // Track which exercise is currently being moved
     @State private var selectedToMove: Exercise? = nil
+    
+    // In your parent view that shows the workout
+    @State private var showAddExerciseSheet = false
     
     init(workoutID: CKRecord.ID) {
         self.viewModel = ExerciseViewModel(workoutID: workoutID)
     }
     
     var body: some View {
-            ZStack {
-                // Background gradient.
-                LinearGradient(
-                    gradient: Gradient(colors: [Color("NeomorphBG2"), Color("NeomorphBG2")]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
-                mainContent
-                    .navigationTitle("Your Exercises")
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
-                            Button(action: { showAddExercise = true }) {
-                                Image(systemName: "plus")
-                            }
+        ZStack {
+            // Background gradient.
+            LinearGradient(
+                gradient: Gradient(colors: [Color("NeomorphBG2"), Color("NeomorphBG2")]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+            
+            mainContent
+                .navigationTitle("Your Exercises")
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: { showAddExercise = true }) {
+                            Image(systemName: "plus")
                         }
                     }
-                    .onAppear {
-                        // 1) Fetch from CloudKit
-                        viewModel.fetchExercises()
+                }
+                .onAppear {
+                    // 1) Fetch from CloudKit
+                    viewModel.fetchExercises()
+                    
+                    // 2) If no exercises, assign dummy data
+                    if viewModel.exercises.isEmpty {
+                        let dummy1 = Exercise(
+                            recordID: nil,
+                            name: "Knelling Lat Pulldowns (wide grip) do extra",
+                            sets: 3,
+                            reps: 10,
+                            setWeights: [100, 105, 110],
+                            setCompletions: [false, false, false],
+                            setNotes: ["", "", ""],
+                            exerciseNote: "Focus on form.",
+                            setActualReps: [10, 10, 10],
+                            timestamp: Date(),
+                            accentColorHex: "#0000FF",
+                            sortIndex: 0
+                        )
+                        let dummy2 = Exercise(
+                            recordID: nil,
+                            name: "Squats",
+                            sets: 3,
+                            reps: 12,
+                            setWeights: [135, 145, 155],
+                            setCompletions: [true, false, false],
+                            setNotes: ["Felt heavy", "", ""],
+                            exerciseNote: "Keep your back straight.",
+                            setActualReps: [12, 12, 10],
+                            timestamp: Date(),
+                            accentColorHex: "#0000FF",
+                            sortIndex: 1
+                        )
                         
-                        // 2) If no exercises, assign dummy data
-                        if viewModel.exercises.isEmpty {
-                            let dummy1 = Exercise(
-                                recordID: nil,
-                                name: "Knelling Lat Pulldowns (wide grip) do extra",
-                                sets: 3,
-                                reps: 10,
-                                setWeights: [100, 105, 110],
-                                setCompletions: [false, false, false],
-                                setNotes: ["", "", ""],
-                                exerciseNote: "Focus on form.",
-                                setActualReps: [10, 10, 10],
-                                timestamp: Date(),
-                                accentColorHex: "#0000FF",
-                                sortIndex: 0
-                            )
-                            let dummy2 = Exercise(
-                                recordID: nil,
-                                name: "Squats",
-                                sets: 3,
-                                reps: 12,
-                                setWeights: [135, 145, 155],
-                                setCompletions: [true, false, false],
-                                setNotes: ["Felt heavy", "", ""],
-                                exerciseNote: "Keep your back straight.",
-                                setActualReps: [12, 12, 10],
-                                timestamp: Date(),
-                                accentColorHex: "#0000FF",
-                                sortIndex: 1
-                            )
-                            
-                            viewModel.exercises = [dummy1, dummy2]
-                        }
+                        viewModel.exercises = [dummy1, dummy2]
                     }
-                    .sheet(isPresented: $showAddExercise) {
-                        NavigationView {
-                            AddExerciseView(viewModel: viewModel)
-                                .presentationDetents([.fraction(0.4)])
-                                .presentationDragIndicator(.visible)
-                        }
+                }
+                .sheet(isPresented: $showAddExercise) {
+                    NavigationView {
+                        AddExerciseView(viewModel: viewModel, onExerciseAdded: {
+                            // Refresh your workout data here
+                            viewModel.fetchExercises() // If you have such a method
+                    
+                        })
+                        .presentationDetents([.fraction(0.4)])
+                        .presentationDragIndicator(.visible)
                     }
-                
-            }
+                }
+        }
         
     }
     
@@ -105,117 +114,379 @@ struct ExercisesView: View {
     }
     
     
+    // MARK: - Exercise List View with Improved Movement System
     private var exercisesListView: some View {
         ScrollView {
-            VStack(spacing: 16) {
-                // ForEach over the entire array
-                ForEach(Array(viewModel.exercises.enumerated()), id: \.element.id) { (index, exercise) in
-                    VStack(spacing: 4) {
-                        if let moving = selectedToMove, moving.id != exercise.id {
-                            Button {
-                                moveExercise(moving: moving, newIndex: index)
-                            } label: {
-                                Image(systemName: "plus.circle")
-                                    .font(.title)
-                                    .foregroundColor(.blue)
-                            }
+            VStack(spacing: 8) {
+                // If we're moving an exercise, show the "move to start" button
+                // only if the exercise isn't already at the start
+                if let movingExercise = selectedToMove,
+                   let currentIndex = viewModel.exercises.firstIndex(where: { $0.id == movingExercise.id }),
+                   currentIndex > 0 {
+                    insertionButton(position: "start", exercise: nil, targetIndex: 0)
+                        .padding(.bottom, 8)
+                }
+                
+                // List all exercises with insertion points
+                ForEach(Array(viewModel.exercises.enumerated()), id: \.element.id) { (localIndex, exercise) in
+                    // Exercise card
+                    ExerciseCardView(
+                        exercise: exercise,
+                        evm: viewModel,
+                        onRequestMove: { exercise in
+                            selectedToMove = exercise
+                            print("DEBUG: onRequestMove called for \(exercise.name)")
+                            refreshID = UUID() // Force view refresh
                         }
+                    )
+                    .id("\(exercise.id)-\(exercise.sortIndex)-\(refreshID)")
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 2)
+                    
+                    // If we're moving an exercise, show insertion points between exercises
+                    if let movingExercise = selectedToMove,
+                       movingExercise.id != exercise.id,
+                       localIndex < viewModel.exercises.count - 1 {
+                        let nextExercise = viewModel.exercises[localIndex + 1]
                         
-                        ExerciseCardView(
-                            exercise: exercise,
-                            evm: viewModel,
-                            onRequestMove: { ex in
-                                selectedToMove = ex
-                                print("DEBUG: onRequestMove called for \(ex.name)")
-                            }
-                        )
-                        
-                        if let moving = selectedToMove, moving.id != exercise.id {
-                            Button {
-                                moveExercise(moving: moving, newIndex: index + 1)
-                            } label: {
-                                Image(systemName: "plus.circle")
-                                    .font(.title)
-                                    .foregroundColor(.blue)
-                            }
+                        // Don't show insertion point if moving exercise is already at this position
+                        if movingExercise.id != nextExercise.id {
+                            insertionButton(
+                                position: "after",
+                                exercise: exercise,
+                                targetIndex: localIndex + 1
+                            )
                         }
                     }
                 }
+                
+                // If we're moving an exercise, show the "move to end" button
+                // only if the exercise isn't already at the end
+                if let movingExercise = selectedToMove,
+                   let currentIndex = viewModel.exercises.firstIndex(where: { $0.id == movingExercise.id }),
+                   currentIndex < viewModel.exercises.count - 1 {
+                    insertionButton(
+                        position: "end",
+                        exercise: nil,
+                        targetIndex: viewModel.exercises.count
+                    )
+                    .padding(.top, 8)
+                }
+                
+                // Add a cancel button when in movement mode
+                if selectedToMove != nil {
+                    Button(action: {
+                        selectedToMove = nil
+                        refreshID = UUID()
+                    }) {
+                        Text("Cancel Move")
+                            .foregroundColor(.red)
+                            .fontWeight(.medium)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(BorderedButtonStyle())
+                    .padding(.top, 16)
+                }
             }
-            .padding(.top)
+            .padding(.vertical, 16)
+            .animation(.default, value: selectedToMove != nil)
+            .animation(.default, value: refreshID)
         }
         .onAppear {
             viewModel.fetchExercises()
         }
     }
+    
+    // MARK: - Exercise Movement Button
+    // MARK: - Exercise Insertion Button View
+    private func insertionButton(position: String, exercise: Exercise?, targetIndex: Int) -> AnyView {
+        guard let movingExercise = selectedToMove else { return AnyView(EmptyView()) }
+        
+        // Calculate the button text based on position
+        let buttonText: String
+        let systemImage: String
+        
+        switch position {
+        case "before":
+            buttonText = "Move \(movingExercise.name) Before \(exercise?.name ?? "")"
+            systemImage = "arrow.up.circle"
+        case "after":
+            buttonText = "Move \(movingExercise.name) After \(exercise?.name ?? "")"
+            systemImage = "arrow.down.circle"
+        case "start":
+            buttonText = "Move \(movingExercise.name) To Start"
+            systemImage = "arrow.up.to.line.circle"
+        case "end":
+            buttonText = "Move \(movingExercise.name) To End"
+            systemImage = "arrow.down.to.line.circle"
+        default:
+            buttonText = "Move \(movingExercise.name) Here"
+            systemImage = "plus.circle"
+        }
+        
+        return AnyView(
+            Button(action: {
+                print("DEBUG: Moving \(movingExercise.name) to index \(targetIndex)")
+                
+                // Get current index of the moving exercise
+                if let currentIndex = viewModel.exercises.firstIndex(where: { $0.id == movingExercise.id }) {
+                    print("DEBUG: Current index of \(movingExercise.name) is \(currentIndex)")
+                    
+                    // Special handling for end position
+                    if position == "end" {
+                        moveExerciseToEnd(moving: movingExercise)
+                    } else {
+                        // Regular position movement with index adjustment
+                        var adjustedTargetIndex = targetIndex
+                        
+                        // If moving to a later position, account for the removal of the current item
+                        if targetIndex > currentIndex {
+                            adjustedTargetIndex -= 1
+                        }
+                        
+                        // Move the exercise
+                        moveExercise(moving: movingExercise, newIndex: adjustedTargetIndex)
+                    }
+                    
+                    // Reset movement state and refresh UI
+                    selectedToMove = nil
+                    refreshID = UUID()
+                }
+            }) {
+                HStack {
+                    Image(systemName: systemImage)
+                        .font(.title)
+                    Text(buttonText)
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(.blue)
+                .padding(.vertical, 8)
+            }
+            .id("exercise-insertion-\(position)-\(targetIndex)-\(refreshID)")
+            .padding(.horizontal, 16)
+        )
+    }
+
+    // MARK: - Move Exercise Logic
     private func moveExercise(moving: Exercise, newIndex: Int) {
-        // 1) Find oldIndex in the global array
-        guard let oldIndex = viewModel.exercises.firstIndex(where: { $0.id == moving.id }) else {
-            print("DEBUG: Could not find moving exercise in global array.")
+        // Find the current index
+        guard let currentIndex = viewModel.exercises.firstIndex(where: { $0.id == moving.id }) else {
+            print("ERROR: Exercise not found in the list")
             return
         }
         
-        // 2) Reorder locally
-        viewModel.reorderExercise(oldIndex: oldIndex, newIndex: newIndex)
+        print("DEBUG: Moving \(moving.name) from \(currentIndex) to \(newIndex)")
         
-        // 3) Push to CloudKit
-        viewModel.updateAllSortIndicesInCloudKit()
+        // Don't do anything if trying to move to the same position
+        if currentIndex == newIndex {
+            print("DEBUG: Exercise is already at the desired index, no need to move")
+            return
+        }
         
-        // 4) Clear the selection so we hide plus icons
-        selectedToMove = nil
+        // Create a copy of the exercises and remove the one being moved
+        var updatedExercises = viewModel.exercises
+        let exerciseToMove = updatedExercises.remove(at: currentIndex)
+        
+        // Insert the exercise at the new position
+        if newIndex >= updatedExercises.count {
+            updatedExercises.append(exerciseToMove)
+        } else {
+            updatedExercises.insert(exerciseToMove, at: newIndex)
+        }
+        
+        // Update all sort indices in the array
+        for index in 0..<updatedExercises.count {
+            updatedExercises[index].sortIndex = index
+        }
+        
+        // Update the model with the new exercise order
+        viewModel.exercises = updatedExercises
+        
+        // Save the updated indices to your database
+        viewModel.updateExerciseSortIndices(updatedExercises)
+        
+        // Print the new sort order for debugging
+        print("DEBUG: New exercise order:")
+        for (i, ex) in updatedExercises.enumerated() {
+            print("  \(i): \(ex.name) (sortIndex: \(ex.sortIndex))")
+        }
+    }
+
+    // MARK: - Special function to move an exercise to the end
+    private func moveExerciseToEnd(moving: Exercise) {
+        // Find the current index
+        guard let currentIndex = viewModel.exercises.firstIndex(where: { $0.id == moving.id }) else {
+            print("ERROR: Exercise not found in the list")
+            return
+        }
+        
+        let lastIndex = viewModel.exercises.count - 1
+        print("DEBUG: Moving \(moving.name) from \(currentIndex) to end position (index \(lastIndex))")
+        
+        // Don't do anything if already at the end
+        if currentIndex == lastIndex {
+            print("DEBUG: Exercise is already at the end, no need to move")
+            return
+        }
+        
+        // Create a copy of the exercises and remove the one being moved
+        var updatedExercises = viewModel.exercises
+        let exerciseToMove = updatedExercises.remove(at: currentIndex)
+        
+        // Add the exercise to the end
+        updatedExercises.append(exerciseToMove)
+        
+        // Update all sort indices in the array
+        for index in 0..<updatedExercises.count {
+            updatedExercises[index].sortIndex = index
+        }
+        
+        // Update the model with the new exercise order
+        viewModel.exercises = updatedExercises
+        
+        // Save the updated indices to your database
+        viewModel.updateExerciseSortIndices(updatedExercises)
+        
+        // Print the new sort order for debugging
+        print("DEBUG: New exercise order:")
+        for (i, ex) in updatedExercises.enumerated() {
+            print("  \(i): \(ex.name) (sortIndex: \(ex.sortIndex))")
+        }
     }
 }
 
 
-
 struct AddExerciseView: View {
     @ObservedObject var viewModel: ExerciseViewModel
-    
     @Environment(\.dismiss) var dismiss
-    
     @State private var exerciseName = ""
     @State private var setsText = ""
     @State private var repsText = ""
-
+    // Add this for keyboard handling
+    @FocusState private var focusedField: Field?
+    
+    // For focus management
+    enum Field {
+        case name, sets, reps
+    }
+    
+    // Add this callback
+    var onExerciseAdded: (() -> Void)? = nil
+    
     var body: some View {
-            Form {
-                Section(header: Text("Exercise Details")) {
-                    TextField("Exercise name", text: $exerciseName)
-                    TextField("Sets", text: $setsText)
-                        .keyboardType(.numberPad)
-                    TextField("Reps", text: $repsText)
-                        .keyboardType(.numberPad)
-                }
-            }
-            .navigationTitle("Add Exercise")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
+        ZStack {
+            VStack {
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Title at the top
+                        Text("Add Exercise")
+                            .font(.title)
+                            .padding(.top, 20)
+                        
+                        // Form fields
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Exercise Details").font(.headline)
+                            
+                            TextField("Exercise name", text: $exerciseName)
+                                .padding()
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(8)
+                                .focused($focusedField, equals: .name)
+                            
+                            TextField("Sets", text: $setsText)
+                                .padding()
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(8)
+                                .keyboardType(.numberPad)
+                                .focused($focusedField, equals: .sets)
+                            
+                            TextField("Reps", text: $repsText)
+                                .padding()
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(8)
+                                .keyboardType(.numberPad)
+                                .focused($focusedField, equals: .reps)
+                        }
+                        .padding()
+                        
+                        // Save button - fixed at the bottom of the ScrollView
+                        saveButton
+                            .padding(.bottom, 20)
+                        
+                        Spacer()
+                        
                     }
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        guard
-                            !exerciseName.isEmpty,
-                            let sets = Int(setsText),
-                            let reps = Int(repsText)
-                        else { return }
-                        
-                        let setWeights = Array(repeating: 0.0, count: sets)
-                        let setCompletions = Array(repeating: false, count: sets)
-                        
-                        viewModel.addExercise(
-                            name: exerciseName,
-                            sets: sets,
-                            reps: reps,
-                            setWeights: setWeights,
-                            setCompletions: setCompletions
-                        )
-                        dismiss()
+                
+                // Cancel button in toolbar
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancel") {
+                            dismiss()
+                        }
+                    }
+                    
+                    // Add a keyboard dismissal button
+                    ToolbarItem(placement: .keyboard) {
+                        Button("Done") {
+                            focusedField = nil
+                        }
                     }
                 }
             }
+        }
+        // This modifier helps prevent the keyboard from pushing content
+        .ignoresSafeArea(.keyboard)
+    }
+    
+    // Extract the save button to a computed property
+    private var saveButton: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Color.gray.opacity(0.12))
+                .frame(maxWidth: 350)
+                .frame(height: 60)
+                .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 2)
+            
+            Button(action: {
+                guard
+                    !exerciseName.isEmpty,
+                    let sets = Int(setsText),
+                    let reps = Int(repsText)
+                else { return }
+                
+                let setWeights = Array(repeating: 0.0, count: sets)
+                let setCompletions = Array(repeating: false, count: sets)
+                
+                viewModel.addExercise(
+                    name: exerciseName,
+                    sets: sets,
+                    reps: reps,
+                    setWeights: setWeights,
+                    setCompletions: setCompletions
+                )
+                
+                onExerciseAdded?()
+                dismiss()
+            }) {
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.white)
+                    
+                    Text("Save Exercise")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundColor(.white)
+                }
+                .padding(.horizontal, 100)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 17)
+                        .fill(exerciseName.isEmpty ? Color.gray.opacity(0.5) : Color.blue.opacity(0.5))                )
+                .shadow(color: Color.black.opacity(0.15), radius: 3, x: 0, y: 2)
+            }
+            .buttonStyle(.borderless)
+        }
     }
 }
 
@@ -439,7 +710,7 @@ struct ExerciseCardView: View {
                                 isEditing = true
                             }
                         )
-                        .padding(.leading, 48)
+                        .padding(.leading, 29)
                         .padding(.top, 7)
 
                         // Add space for the rest of your content
@@ -456,7 +727,7 @@ struct ExerciseCardView: View {
         // Present the color picker sheet.
         .sheet(isPresented: $showColorPicker) {
                 ColorPickerSheet(accentColor: $localAccentColor, evm: evm, exercise: exercise)
-                .presentationDetents([.fraction(0.25)])
+                .presentationDetents([.fraction(0.55)])
                 .presentationDragIndicator(.visible)
             }
     }
@@ -622,66 +893,142 @@ extension View {
     }
 }
 
-extension Color {
-    /// Initialize a Color from a hex string (e.g., "#FF0000")
-    init?(hex: String) {
-        let r, g, b: Double
-        
-        // Remove the '#' if present.
-        let hexColor = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        guard hexColor.count == 6, let intVal = Int(hexColor, radix: 16) else {
-            return nil
-        }
-        r = Double((intVal >> 16) & 0xFF) / 255.0
-        g = Double((intVal >> 8) & 0xFF) / 255.0
-        b = Double(intVal & 0xFF) / 255.0
-        
-        self.init(red: r, green: g, blue: b)
-    }
-    
-    /// Convert a Color to a hex string (ignores alpha)
-    func toHex() -> String? {
-        #if canImport(UIKit)
-        // Convert SwiftUI Color to UIColor
-        let uiColor = UIColor(self)
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        guard uiColor.getRed(&r, green: &g, blue: &b, alpha: &a) else { return nil }
-        let rgb: Int = (Int)(r * 255) << 16 | (Int)(g * 255) << 8 | (Int)(b * 255)
-        return String(format: "#%06x", rgb)
-        #else
-        return nil
-        #endif
-    }
-}
+
 
 struct ColorPickerSheet: View {
     @Binding var accentColor: Color
     @Environment(\.presentationMode) var presentationMode
     let evm: ExerciseViewModel
     let exercise: Exercise
+    
+    // Define 8 distinct color options
+    let colorOptions: [(name: String, color: Color)] = [
+        ("Blue", Color.blue),
+        ("Green", Color(hex: "#4CAF50")), // Material Green
+        ("Purple", Color(hex: "#9C27B0")), // Material Purple
+        ("Orange", Color(hex: "#FF9800")), // Material Orange
+        ("Red", Color(hex: "#F44336")), // Material Red
+        ("Teal", Color(hex: "#009688")), // Material Teal
+        ("Pink", Color(hex: "#E91E63")), // Material Pink
+        ("Amber", Color(hex: "#FFC107")) // Material Amber
+    ]
 
     var body: some View {
-        Form {
-                ColorPicker("Select a Color", selection: $accentColor)
-                    .padding()
-            }
-            .navigationTitle("Pick Accent Color")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        // Convert the selected Color to a hex string.
-                        if let newHex = accentColor.toHex(), let recordID = exercise.recordID {
-                            evm.updateExercise(recordID: recordID, newAccentColor: newHex)
+        VStack(spacing: 20) {
+            Text("Choose an accent color")
+                .font(.headline)
+                .padding(.top)
+            
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 70))], spacing: 15) {
+                ForEach(colorOptions, id: \.name) { option in
+                    ColorOption(
+                        color: option.color,
+                        name: option.name,
+                        isSelected: accentColor.toHex() == option.color.toHex(),
+                        action: {
+                            accentColor = option.color
                         }
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
+                    )
                 }
             }
+            .padding()
+            
+            Spacer()
+            
+            HStack {
+                Button("Cancel") {
+                    presentationMode.wrappedValue.dismiss()
+                }
+                .padding()
+                .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Button("Done") {
+                    if let newHex = accentColor.toHex(), let recordID = exercise.recordID {
+                        evm.updateExercise(recordID: recordID, newAccentColor: newHex)
+                    }
+                    presentationMode.wrappedValue.dismiss()
+                }
+                .padding()
+                .foregroundColor(.blue)
+                .bold()
+            }
+            .padding(.horizontal)
+        }
+        .padding()
+        .navigationTitle("Pick Accent Color")
+    }
+}
+
+// A custom color option view for each color in the grid
+struct ColorOption: View {
+    let color: Color
+    let name: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack {
+                Circle()
+                    .fill(color)
+                    .frame(width: 50, height: 50)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white, lineWidth: 2)
+                            .padding(2)
+                    )
+                    .overlay(
+                        Image(systemName: "checkmark")
+                            .foregroundColor(.white)
+                            .opacity(isSelected ? 1 : 0)
+                    )
+                    .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 2)
+                
+                Text(name)
+                    .font(.caption)
+                    .foregroundColor(.primary)
+            }
+        }
+    }
+}
+
+// Extension to support hex colors if not already present
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 3: // RGB (12-bit)
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6: // RGB (24-bit)
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8: // ARGB (32-bit)
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (1, 1, 1, 0)
+        }
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue: Double(b) / 255,
+            opacity: Double(a) / 255
+        )
+    }
+    
+    func toHex() -> String? {
+        let uic = UIColor(self)
+        guard let components = uic.cgColor.components, components.count >= 3 else {
+            return nil
+        }
+        let r = Float(components[0])
+        let g = Float(components[1])
+        let b = Float(components[2])
+        return String(format: "#%02lX%02lX%02lX", lroundf(r * 255), lroundf(g * 255), lroundf(b * 255))
     }
 }
 
@@ -868,10 +1215,11 @@ struct SetRowView: View {
                     }
                 }
                 )
+                .presentationDetents([.fraction(0.4)])
+                .presentationDragIndicator(.visible)
 
             }
-            .presentationDetents([.fraction(0.5)])
-            .presentationDragIndicator(.visible)
+  
         }
         .onAppear {
             // Set initial state for the text field visibility.
@@ -989,9 +1337,10 @@ struct ExerciseNoteView: View {
                         evm.updateExercise(recordID: recordID, newNote: localNote)
                     }
                 })
+                .presentationDetents([.fraction(0.4)])
+                .presentationDragIndicator(.visible)
             }
-            .presentationDetents([.fraction(0.5)])
-            .presentationDragIndicator(.visible)
+           
         }
     }
 }
@@ -1046,5 +1395,8 @@ class ZeroDefaultNumberFormatter: NumberFormatter {
 
 
 #Preview {
-    ExercisesView(workoutID: CKRecord.ID(recordName: "DummyWorkoutID"))
+    NavigationView {
+        
+        ExercisesView(workoutID: CKRecord.ID(recordName: "DummyWorkoutID"))
+    }
 }
