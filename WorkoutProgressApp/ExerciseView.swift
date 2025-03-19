@@ -12,14 +12,27 @@ struct ExercisesView: View {
     @ObservedObject var viewModel: ExerciseViewModel
     @State private var showAddExercise = false
     
-    // A unique ID to force SwiftUI to re-render when needed.
-    @State private var refreshID = UUID()
+    // Add these state variables to prevent navigation issues
+    @State private var isInitiallyLoading = true
+    @State private var hasCompletedInitialLoad = false
     
     // Track which exercise is currently being moved
     @State private var selectedToMove: Exercise? = nil
     
     // In your parent view that shows the workout
     @State private var showAddExerciseSheet = false
+    @State private var lastFetchedWorkoutID: String?
+    
+    // Add these properties to your view:
+    @State private var lastNavigationTime = Date.distantPast
+    private let navigationDebounceInterval: TimeInterval = 0.3
+    
+    @State private var viewRefreshID = UUID() // Additional local refresh trigger
+    
+    // Add these properties to your view
+    @State private var isLoading = false
+    @State private var hasAttemptedLoad = false
+
     
     init(workoutID: CKRecord.ID) {
         self.viewModel = ExerciseViewModel(workoutID: workoutID)
@@ -52,8 +65,8 @@ struct ExercisesView: View {
                     if viewModel.exercises.isEmpty {
                         let dummy1 = Exercise(
                             recordID: nil,
-                            name: "Knelling Lat Pulldowns (wide grip) do extra",
-                            sets: 3,
+                            name: "Knelling Lat Pulldowns",
+                            sets: 1,
                             reps: 10,
                             setWeights: [100, 105, 110],
                             setCompletions: [false, false, false],
@@ -67,7 +80,7 @@ struct ExercisesView: View {
                         let dummy2 = Exercise(
                             recordID: nil,
                             name: "Squats",
-                            sets: 3,
+                            sets: 1,
                             reps: 12,
                             setWeights: [135, 145, 155],
                             setCompletions: [true, false, false],
@@ -82,19 +95,18 @@ struct ExercisesView: View {
                         viewModel.exercises = [dummy1, dummy2]
                     }
                 }
+            
+            // And update your sheet presentation:
                 .sheet(isPresented: $showAddExercise) {
                     NavigationView {
                         AddExerciseView(viewModel: viewModel, onExerciseAdded: {
-                            // Refresh your workout data here
-                            viewModel.fetchExercises() // If you have such a method
-                    
+                            print("Exercise added successfully")
                         })
                         .presentationDetents([.fraction(0.4)])
                         .presentationDragIndicator(.visible)
                     }
                 }
         }
-        
     }
     
     private var mainContent: some View {
@@ -114,8 +126,191 @@ struct ExercisesView: View {
     }
     
     
-    // MARK: - Exercise List View with Improved Movement System
+
     private var exercisesListView: some View {
+        // Wrapper for the entire list
+        return ZStack {
+            VStack {
+                // Debug info
+                Group {
+                    Text("\(viewModel.exercises.count) exercises loaded (v\(viewModel.stateVersion))")
+                    Text("Workout: \(viewModel.workoutID.recordName.prefix(8))...")
+                }
+                .font(.caption)
+                .foregroundColor(.gray)
+                .opacity(0.7)
+                .padding(.top, 4)
+                
+                // Main content with clear loading states
+                if isLoading {
+                    // Show loading indicator when we're actively loading
+                    VStack {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .padding()
+                        Text("Loading exercises...")
+                            .foregroundColor(.gray)
+                    }
+                    .transition(.opacity)
+                } else if viewModel.exercises.isEmpty {
+                    // Only show empty state if we've tried loading and got nothing
+                    if hasAttemptedLoad {
+                        emptyStateView
+                            .transition(.opacity)
+                    } else {
+                        // If we haven't attempted to load yet, show a loading indicator
+                        // This handles the initial state
+                        VStack {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .padding()
+                            Text("Preparing...")
+                                .foregroundColor(.gray)
+                        }
+                        .transition(.opacity)
+                    }
+                } else {
+                    // We have exercises to show
+                    exercisesContentView
+                        .transition(.opacity)
+                }
+            }
+            
+            // Use a simpler ID that won't cause excessive rebuilds
+            .id("workout-\(viewModel.workoutID.recordName)-\(viewRefreshID)")
+        }
+        .onAppear {
+            print("🔍 VIEW: exercisesListView appeared for workout: \(viewModel.workoutID.recordName)")
+            
+            // IMPORTANT: Set loading state immediately on appear for better UX
+            self.isLoading = true
+            
+            // Check if this is a rapid navigation
+            let now = Date()
+            let isRapidNavigation = now.timeIntervalSince(lastNavigationTime) < navigationDebounceInterval
+            lastNavigationTime = now
+            
+            // Determine if we need to fetch
+            let differentWorkout = viewModel.lastFetchedWorkoutID != viewModel.workoutID.recordName
+            let shouldFetch = !hasAttemptedLoad || differentWorkout || viewModel.exercises.isEmpty
+            
+            // Only fetch if needed and not navigating too rapidly
+            if shouldFetch && !isRapidNavigation {
+                print("🔍 VIEW: Triggering fetch for workout: \(viewModel.workoutID.recordName)")
+                
+                // Clear any existing operations
+                ExerciseViewModel.clearOperationsForWorkout(viewModel.workoutID.recordName)
+                
+                // Add a slight delay to allow the loading state to be visible
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    // Verify view is still visible
+                    guard viewModel.isActive else {
+                        print("🔍 VIEW: Skipping fetch - view no longer active")
+                        self.isLoading = false
+                        return
+                    }
+                    
+                    // Perform the fetch
+                    self.viewModel.fetchExercises(forceRefresh: differentWorkout) { success in
+                        print("🔍 VIEW: Fetch completed with success: \(success). Exercises: \(self.viewModel.exercises.count)")
+                        
+                        // Ensure loading indicator stays visible long enough to be seen
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            withAnimation {
+                                self.isLoading = false
+                                self.hasAttemptedLoad = true
+                                self.viewRefreshID = UUID()
+                            }
+                        }
+                    }
+                }
+            } else {
+                let reason = isRapidNavigation ? "rapid navigation" : "data appears valid"
+                print("🔍 VIEW: Skipping fetch on appear, \(reason)")
+                
+                // Even if we skip the fetch, show a brief loading indicator for consistency
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation {
+                        self.isLoading = false
+                        self.hasAttemptedLoad = true
+                    }
+                }
+            }
+        }
+        .onDisappear {
+            print("🔍 VIEW: exercisesListView disappeared for workout: \(viewModel.workoutID.recordName)")
+            
+            // Reset loading state and clear operations
+            self.isLoading = false
+            ExerciseViewModel.clearOperationsForWorkout(viewModel.workoutID.recordName)
+        }
+    }
+
+
+
+    // Helper to check if we should expect exercises for this workout
+    private func shouldHaveExercises() -> Bool {
+        let workoutIDString = viewModel.workoutID.recordName
+        
+        // Check if we've previously fetched exercises for this workout
+        if let lastCount = UserDefaults.standard.object(forKey: "LastFetchCount-\(workoutIDString)") as? Int {
+            return lastCount > 0
+        }
+        
+        return false
+    }
+
+    // Add this helper function to your view
+    private func needsFreshData() -> Bool {
+        // Logic to determine if we need fresh data:
+        // 1. Current exercises count is zero
+        // 2. OR The last fetched workout ID doesn't match current workout
+        // 3. OR It's been too long since last fetch
+        
+        if viewModel.exercises.isEmpty {
+            print("🔍 VIEW: Need fresh data - exercises array is empty")
+            return true
+        }
+        
+        if lastFetchedWorkoutID != viewModel.workoutID.recordName {
+            print("🔍 VIEW: Need fresh data - workout ID changed from \(lastFetchedWorkoutID ?? "nil") to \(viewModel.workoutID.recordName)")
+            return true
+        }
+        
+        // Optional: Check if data is stale based on time
+        if Date().timeIntervalSince(viewModel.lastFetchTime) > 60 { // 1 minute
+            print("🔍 VIEW: Need fresh data - last fetch was too long ago")
+            return true
+        }
+        
+        return false
+    }
+    
+    
+
+    // Empty state view
+    private var emptyStateView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "dumbbell")
+                .font(.system(size: 50))
+                .foregroundColor(.gray)
+                .padding(.bottom, 8)
+            
+            Text("No Exercises Yet")
+                .font(.headline)
+            
+            Text("Add your first exercise to get started")
+                .font(.subheadline)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+        }
+        .frame(maxWidth: .infinity, minHeight: 200)
+        .padding(.vertical, 40)
+    }
+
+    // Regular content with exercises
+    private var exercisesContentView: some View {
         ScrollView {
             VStack(spacing: 8) {
                 // If we're moving an exercise, show the "move to start" button
@@ -136,10 +331,10 @@ struct ExercisesView: View {
                         onRequestMove: { exercise in
                             selectedToMove = exercise
                             print("DEBUG: onRequestMove called for \(exercise.name)")
-                            refreshID = UUID() // Force view refresh
+                            viewModel.refreshID = UUID() // Force view refresh
                         }
                     )
-                    .id("\(exercise.id)-\(exercise.sortIndex)-\(refreshID)")
+                    .id("\(viewModel.refreshID)-card-\(exercise.id)")
                     .padding(.horizontal, 16)
                     .padding(.vertical, 2)
                     
@@ -177,7 +372,7 @@ struct ExercisesView: View {
                 if selectedToMove != nil {
                     Button(action: {
                         selectedToMove = nil
-                        refreshID = UUID()
+                        viewModel.refreshID = UUID()
                     }) {
                         Text("Cancel Move")
                             .foregroundColor(.red)
@@ -189,15 +384,11 @@ struct ExercisesView: View {
                 }
             }
             .padding(.vertical, 16)
-            .animation(.default, value: selectedToMove != nil)
-            .animation(.default, value: refreshID)
-        }
-        .onAppear {
-            viewModel.fetchExercises()
         }
     }
     
-    // MARK: - Exercise Movement Button
+    
+    
     // MARK: - Exercise Insertion Button View
     private func insertionButton(position: String, exercise: Exercise?, targetIndex: Int) -> AnyView {
         guard let movingExercise = selectedToMove else { return AnyView(EmptyView()) }
@@ -250,7 +441,7 @@ struct ExercisesView: View {
                     
                     // Reset movement state and refresh UI
                     selectedToMove = nil
-                    refreshID = UUID()
+                                                viewModel.refreshID = UUID()
                 }
             }) {
                 HStack {
@@ -262,7 +453,7 @@ struct ExercisesView: View {
                 .foregroundColor(.blue)
                 .padding(.vertical, 8)
             }
-            .id("exercise-insertion-\(position)-\(targetIndex)-\(refreshID)")
+            .id("exercise-insertion-\(position)-\(targetIndex)-\(                            viewModel.refreshID)")
             .padding(.horizontal, 16)
         )
     }
@@ -354,6 +545,7 @@ struct ExercisesView: View {
         }
     }
 }
+
 
 
 struct AddExerciseView: View {
@@ -448,6 +640,7 @@ struct AddExerciseView: View {
                 .frame(height: 60)
                 .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 2)
             
+            // In your AddExerciseView
             Button(action: {
                 guard
                     !exerciseName.isEmpty,
@@ -458,34 +651,59 @@ struct AddExerciseView: View {
                 let setWeights = Array(repeating: 0.0, count: sets)
                 let setCompletions = Array(repeating: false, count: sets)
                 
+                // Show loading state if you have one
+                viewModel.isLoading = true
+                
+                // Pass a completion handler to execute after CloudKit operation
                 viewModel.addExercise(
                     name: exerciseName,
                     sets: sets,
                     reps: reps,
                     setWeights: setWeights,
                     setCompletions: setCompletions
-                )
-                
-                onExerciseAdded?()
-                dismiss()
+                ) {
+                    // This runs after the CloudKit operation completes
+                    DispatchQueue.main.async {
+                        // Hide loading state
+                        viewModel.isLoading = false
+                        
+                        // Call parent view callback
+                        onExerciseAdded?()
+                        
+                        // Dismiss the sheet after everything is done
+                        dismiss()
+                    }
+                }
             }) {
+                // Button content
                 HStack {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 22))
+                    Text("Save Exercise")
+                        .font(.headline)
                         .foregroundColor(.white)
                     
-                    Text("Save Exercise")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundColor(.white)
+                    if viewModel.isLoading {
+                        Spacer()
+                        ProgressView()
+                            .tint(.white)
+                    }
                 }
-                .padding(.horizontal, 100)
-                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .padding()
                 .background(
-                    RoundedRectangle(cornerRadius: 17)
-                        .fill(exerciseName.isEmpty ? Color.gray.opacity(0.5) : Color.blue.opacity(0.5))                )
-                .shadow(color: Color.black.opacity(0.15), radius: 3, x: 0, y: 2)
+                    !exerciseName.isEmpty &&
+                    !setsText.isEmpty && Int(setsText) != nil &&
+                    !repsText.isEmpty && Int(repsText) != nil ?
+                    Color.blue : Color.gray
+                )
+                .cornerRadius(10)
             }
-            .buttonStyle(.borderless)
+            .disabled(
+                exerciseName.isEmpty ||
+                setsText.isEmpty || Int(setsText) == nil ||
+                repsText.isEmpty || Int(repsText) == nil ||
+                viewModel.isLoading  // Disable while loading
+            )
+
         }
     }
 }
@@ -501,7 +719,6 @@ struct ExerciseCardView: View {
     
     // For controlling plus-icon vs. text field on a per-index basis
     @State private var isTextFieldVisible: [Bool]
-    @State private var isEditing = false
     @State private var showColorPicker = false
 
     // For editing name/sets
@@ -512,6 +729,13 @@ struct ExerciseCardView: View {
     @State private var noteHeight: CGFloat = 0
     @State private var nameHeight: CGFloat = 0
 
+    // This makes isEditing persistent across view rebuilds
+    @State private var isEditing: Bool = false {
+        // This didSet helps diagnose when isEditing changes
+        didSet {
+            print("🔄 isEditing changed to: \(isEditing)")
+        }
+    }
 
     var rectangleProgress: CGFloat = 0.01
     var cornerRadius: CGFloat = 15
@@ -641,29 +865,72 @@ struct ExerciseCardView: View {
                             SetsField(exercise: exercise, evm: evm)
                             
                             RepsField(exercise: exercise, evm: evm)
-                            // 2.3) "Done" button to exit editing mode
+      
+
+                            // Then modify the Button("Done Editing") part:
+                            // Updated Done Editing Button Implementation
                             Button("Done Editing") {
-                                if let recordID = recordID {
-                                    evm.updateExercise(
-                                        recordID: recordID,
-                                        newName: editedName,
-                                        newSets: editedSets
-                                    )
+                                withAnimation(.none) {  // Disable animation to prevent cascade refreshes
+                                    if let recordID = exercise.recordID {
+                                        // First, collect any pending changes from our stable fields
+                                        // by forcing any debounced updates to execute immediately
+                                        
+                                        // Short delay to ensure all field updates are processed first
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                            // Using regular updateExercise for this final update as we want
+                                            // the UI to refresh once we exit edit mode
+                                            evm.updateExercise(
+                                                recordID: recordID,
+                                                // Use the current values from the exercise object
+                                                // which should be up-to-date from our field components
+                                                newName: exercise.name,
+                                                newSets: exercise.sets,
+                                                newReps: exercise.reps
+                                            )
+                                            
+                                            // Exit edit mode after a delay to ensure CloudKit update completes
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                                isEditing = false
+                                            }
+                                        }
+                                    } else {
+                                        // No recordID available, just exit edit mode
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                            isEditing = false
+                                        }
+                                    }
                                 }
-                                isEditing = false
                             }
                             .buttonStyle(.borderless)
-                            .foregroundColor(.white).opacity(0.8)
+                            .foregroundColor(.white.opacity(0.8))
+                            // And modify your gear icon button that enters edit mode:
+                            Button {
+                                withAnimation(.none) {  // Disable animation to prevent cascade refreshes
+                                    // Set up any initial values first
+                                    editedName = exercise.name
+                                    editedSets = exercise.sets
+                                    
+                                    // Use asyncAfter to set isEditing to true AFTER any view setup completes
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        isEditing = true
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "gearshape")
+                                    .foregroundColor(.white)
+                            }
 
                         }
     
                     }
                 }
             } else {
-                let dynamicHeight = 80.0
-                    + Double(exercise.setWeights.count) * 80.0
-                    + Double(noteHeight)
-                    + Double(nameHeight)
+                // Calculate dynamic height to account for all elements
+                let dynamicHeight = 60.0 // Base padding
+                    + nameHeight // Account for the name view height
+                    + Double(exercise.sets) * 60.0 // Height for each set row
+                    + Double(noteHeight) // Note height
+                    + 40.0 // Extra padding for consistent spacing
             
                 ZStack(alignment: .center) {
               
@@ -692,7 +959,7 @@ struct ExerciseCardView: View {
                             .foregroundColor(.white.opacity(0.8))
                     
                         // -- For each set
-                        ForEach(exercise.setWeights.indices, id: \.self) { index in
+                        ForEach(0..<exercise.sets, id: \.self) { index in
                             SetRowView(exercise: exercise, index: index, evm: evm)
                         }
                     }
@@ -701,26 +968,28 @@ struct ExerciseCardView: View {
                     VStack(spacing: 0) {
                         // Exercise name view with integrated gear icon
                         ExerciseNameView(
-                            name: exercise.name,
-                            fixedWidth: 328,  // Set your desired fixed width
-                            nameHeight: $nameHeight,
-                            action: {
-                                editedName = exercise.name
-                                editedSets = exercise.sets
-                                isEditing = true
-                            }
-                        )
-                        .padding(.leading, 29)
-                        .padding(.top, 7)
-
-                        // Add space for the rest of your content
-                        Spacer().frame(height: nameHeight)
+                                   name: exercise.name,
+                                   fixedWidth: cardWidth,
+                                   nameHeight: $nameHeight,
+                                   action: {
+                                       // Set these values before changing isEditing
+                                       editedName = exercise.name
+                                       editedSets = exercise.sets
+                                       
+                                       // Use withAnimation for smooth transition
+                                       withAnimation {
+                                           isEditing = true
+                                       }
+                                   }
+                               )
+                        .padding(.leading, 36)
+                        .padding(.top, 7.5)
                         
-                        // Rest of your exercise content below the name
-                        // ...
+                        Spacer()
                     }
-                    .frame(width: cardWidth)
+                    .frame(width: cardWidth, alignment: .center) // Ensure alignment is consistent
                 }
+      
             }
         }
                 .padding()
@@ -772,37 +1041,12 @@ struct ExerciseNameView: View {
     let minHeight: CGFloat = 40
     let action: () -> Void
     
+    // Add state to track text size more precisely
+    @State private var textSize: CGSize = .zero
+    
     var body: some View {
         ZStack(alignment: .leading) {
-            // Text measurement view
-            Text(name)
-                .font(.title3)
-                .bold()
-                .foregroundColor(.clear)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.vertical, verticalPadding)
-                .padding(.leading, 14) // Increased left padding for measurement
-                .padding(.trailing, 4)
-                .frame(width: fixedWidth - iconSpace - 8, alignment: .leading)
-                .background(
-                    GeometryReader { geo in
-                        Color.clear
-                            .onAppear {
-                                nameHeight = max(geo.size.height + extraHeight, minHeight)
-                            }
-                            .onChange(of: geo.size) { newSize in
-                                nameHeight = max(newSize.height + extraHeight, minHeight)
-                            }
-                            .onChange(of: name) { _ in
-                                DispatchQueue.main.async {
-                                    nameHeight = max(geo.size.height + extraHeight, minHeight)
-                                }
-                            }
-                    }
-                )
-            
-            // Background shape
+            // Background shape - making sure it's correctly sized
             CustomRoundedRectangle4(
                 topLeftRadius: 0,
                 topRightRadius: 20,
@@ -820,12 +1064,12 @@ struct ExerciseNameView: View {
                     endPoint: .bottom
                 )
             )
-            .frame(width: fixedWidth, height: nameHeight)
+            .frame(width: fixedWidth - 10, height: nameHeight)
             
             // Content with text and icon
             HStack(spacing: 0) {
                 // Add extra padding at the beginning
-                Spacer(minLength: 10) // Add 10 points of space at the start
+                Spacer(minLength: 10)
                 
                 // Actual visible text
                 Text(name)
@@ -836,11 +1080,23 @@ struct ExerciseNameView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.vertical, verticalPadding)
                     .padding(.horizontal, 4)
-                    .frame(maxWidth: fixedWidth - iconSpace - 10, alignment: .leading) // Adjusted width to account for left padding
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear.onAppear {
+                                textSize = geo.size
+                                nameHeight = max(geo.size.height + extraHeight, minHeight)
+                            }
+                            .onChange(of: geo.size) { newSize in
+                                textSize = newSize
+                                nameHeight = max(newSize.height + extraHeight, minHeight)
+                            }
+                        }
+                    )
+                    .frame(maxWidth: fixedWidth - iconSpace - 10, alignment: .leading)
                 
                 Spacer(minLength: 0)
                 
-                // Gear icon remains in the same position
+                // Gear icon with consistent sizing
                 Button(action: action) {
                     Image(systemName: "gear")
                         .opacity(0.7)
@@ -850,7 +1106,13 @@ struct ExerciseNameView: View {
                 }
                 .buttonStyle(.borderless)
             }
-            .frame(width: fixedWidth)
+            .frame(width: fixedWidth) // Match exactly with the card width
+        }
+        // Force layout update when name changes
+        .onChange(of: name) { _ in
+            DispatchQueue.main.async {
+                nameHeight = max(textSize.height + extraHeight, minHeight)
+            }
         }
     }
 }
@@ -1396,7 +1658,6 @@ class ZeroDefaultNumberFormatter: NumberFormatter {
 
 #Preview {
     NavigationView {
-        
-        ExercisesView(workoutID: CKRecord.ID(recordName: "DummyWorkoutID"))
+        ExercisesView(workoutID: CKRecord.ID(recordName: "UserExercises"))
     }
 }

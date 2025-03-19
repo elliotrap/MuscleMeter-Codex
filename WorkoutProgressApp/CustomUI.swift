@@ -5,7 +5,7 @@
 //  Created by Elliot Rapp on 2/12/25.
 //
 import SwiftUI
-
+import Combine
 
 
 
@@ -561,10 +561,11 @@ struct WeightField: View {
     let index: Int
     let evm: ExerciseViewModel
     @FocusState private var isFocused: Bool  // Focus for this field
-
     
     // Local state to hold the current text value.
     @State private var localText: String = ""
+    // Track whether we've initialized the field to prevent automatic updates
+    @State private var hasInitialized: Bool = false
     // A debouncing work item.
     @State private var debouncedWorkItem: DispatchWorkItem?
 
@@ -592,11 +593,18 @@ struct WeightField: View {
         .frame(width: 50)
         .focused($isFocused)  // <-- We'll track focus
         .onAppear {
-            // Initialize the text field with the current weight.
-            let weight = exercise.setWeights[index]
-            localText = weight == 0 ? "" : (formatter.string(from: NSNumber(value: weight)) ?? "")
+            // Initialize the text field with the current weight, but only once
+            if !hasInitialized {
+                let weight = exercise.setWeights[index]
+                localText = weight == 0 ? "" : (formatter.string(from: NSNumber(value: weight)) ?? "")
+                hasInitialized = true
+            }
         }
+        // Only update when the text changes due to user input, not during rendering
         .onChange(of: localText) { newValue in
+            // Only proceed if we've been initialized
+            guard hasInitialized else { return }
+            
             // Cancel any pending update.
             debouncedWorkItem?.cancel()
             
@@ -604,9 +612,9 @@ struct WeightField: View {
             let workItem = DispatchWorkItem {
                 // Convert the string to a double and update CloudKit.
                 if newValue.isEmpty {
-                    updateWeightValue(for: exercise, at: index, newWeight: 0)
+                    updateWeightValueIfChanged(for: exercise, at: index, newWeight: 0)
                 } else if let weightValue = Double(newValue) {
-                    updateWeightValue(for: exercise, at: index, newWeight: weightValue)
+                    updateWeightValueIfChanged(for: exercise, at: index, newWeight: weightValue)
                 }
             }
             debouncedWorkItem = workItem
@@ -614,17 +622,34 @@ struct WeightField: View {
             // Schedule the update after a 0.5-second delay.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
         }
+        // Update when focus is lost to ensure changes are saved
+        .onChange(of: isFocused) { focused in
+            if !focused {
+                // Focus was lost, update if needed
+                debouncedWorkItem?.cancel() // Cancel any pending debounced update
+                
+                if let weightValue = Double(localText) {
+                    updateWeightValueIfChanged(for: exercise, at: index, newWeight: weightValue)
+                } else if localText.isEmpty {
+                    updateWeightValueIfChanged(for: exercise, at: index, newWeight: 0)
+                }
+            }
+        }
     }
 
-    private func updateWeightValue(for exercise: Exercise, at index: Int, newWeight: Double) {
+    // Only update if the value actually changed
+    private func updateWeightValueIfChanged(for exercise: Exercise, at index: Int, newWeight: Double) {
         guard let recordID = exercise.recordID else { return }
         
-        // Copy the current weights and update only the specified index.
-        var updatedWeights = exercise.setWeights
-        updatedWeights[index] = newWeight
-        
-        // Call the CloudKit update method.
-        evm.updateExercise(recordID: recordID, newWeights: updatedWeights)
+        // Check if the value has actually changed to avoid unnecessary updates
+        if abs(exercise.setWeights[index] - newWeight) > 0.001 { // Use a small epsilon for floating point comparison
+            // Copy the current weights and update only the specified index.
+            var updatedWeights = exercise.setWeights
+            updatedWeights[index] = newWeight
+            
+            // Call the CloudKit update method.
+            evm.updateExercise(recordID: recordID, newWeights: updatedWeights)
+        }
     }
 }
 
@@ -635,9 +660,11 @@ struct ActualRepsField: View {
     let evm: ExerciseViewModel
     
     @Binding var isTextFieldVisible: Bool
-    @FocusState private var isFocused: Bool  // Focus for this field
+    @FocusState private var isFocused: Bool
     @State private var localText: String = ""
-
+    
+    // Track whether we've initialized the field to prevent automatic updates
+    @State private var hasInitialized: Bool = false
     @State private var debouncedWorkItem: DispatchWorkItem?
     
     var body: some View {
@@ -655,35 +682,30 @@ struct ActualRepsField: View {
                 )
                 .foregroundColor(.white).opacity(0.8)
                 .frame(width: 25)
-                .focused($isFocused)  // <-- We'll track focus
+                .focused($isFocused)
                         
             Text(")")
                 .foregroundColor(.white).opacity(0.8)
         }
         .onAppear {
-            // Initialize the text field with the current reps
-            let reps = exercise.setActualReps[index]
-            localText = reps == 0 ? "" : String(reps)
-        }
-        .onAppear {
-            // Initialize text
-            let reps = exercise.setActualReps[index]
-            localText = reps == 0 ? "" : String(reps)
-        }
-        .onChange(of: localText) { newValue in
-            // Possibly update reps after a delay
-            // or immediately if you prefer
-        }
-        // 1) If focus changes to false, and text is empty => revert to plus icon
-        .onChange(of: isFocused) { newValue in
-            if !newValue && localText.isEmpty {
-                isTextFieldVisible = false
+            // Initialize the field with the current reps, but only once
+            if !hasInitialized {
+                let reps = exercise.setActualReps[index]
+                localText = reps == 0 ? "" : String(reps)
+                hasInitialized = true
             }
         }
+        // Only update when the text changes due to user input
         .onChange(of: localText) { newValue in
+            // Only proceed if we've been initialized
+            guard hasInitialized else { return }
+            
+            // Cancel any pending update
             debouncedWorkItem?.cancel()
             
+            // Create a new work item for the update
             let workItem = DispatchWorkItem {
+                // Convert the string to an int and update CloudKit
                 if newValue.isEmpty {
                     updateActualReps(for: exercise, at: index, newReps: 0)
                 } else if let repsValue = Int(newValue) {
@@ -691,132 +713,221 @@ struct ActualRepsField: View {
                 }
             }
             debouncedWorkItem = workItem
+            
+            // Schedule the update after a 0.5-second delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+        }
+        // Update when focus is lost and handle plus icon visibility
+        .onChange(of: isFocused) { focused in
+            if !focused {
+                // Focus was lost, update if needed
+                debouncedWorkItem?.cancel() // Cancel any pending debounced update
+                
+                if let repsValue = Int(localText) {
+                    updateActualReps(for: exercise, at: index, newReps: repsValue)
+                } else if localText.isEmpty {
+                    updateActualReps(for: exercise, at: index, newReps: 0)
+                    isTextFieldVisible = false // Revert to plus icon when empty
+                }
+            }
         }
     }
     
+    // Only update if the value has actually changed
     private func updateActualReps(for exercise: Exercise, at index: Int, newReps: Int) {
         guard let recordID = exercise.recordID else { return }
-        var updatedReps = exercise.setActualReps
-        updatedReps[index] = newReps
-        evm.updateExercise(recordID: recordID, newActualReps: updatedReps)
+        
+        // Check if the value has actually changed
+        if exercise.setActualReps[index] != newReps {
+            // Copy the current reps and update only the specified index
+            var updatedReps = exercise.setActualReps
+            updatedReps[index] = newReps
+            
+            // Call the CloudKit update method
+            evm.updateExercise(recordID: recordID, newActualReps: updatedReps)
+        }
     }
 }
 
-struct SetsField: View {
-    let exercise: Exercise
-    let evm: ExerciseViewModel
-    private let maxSets: Int = 15
-    private let minSets: Int = 1
 
-    @FocusState private var isFocused: Bool  // Focus for this field
-
-    
-    // Local state for the text field's current value.
-    @State private var localText: String = ""
-    // A debouncing work item to delay the update.
-    @State private var debouncedWorkItem: DispatchWorkItem?
-    // An optional error message for when input is out of range.
-    @State private var errorMessage: String? = nil
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Sets:")
-                    .foregroundColor(.white).opacity(0.8)
-                TextField(
-                    "Sets",
-                    text: $localText
-                )
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.center)      // Centers the text horizontally
-                .padding(.vertical, 4)               // Some vertical padding inside the field
-                .background(
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(Color(.black).opacity(0.2))
-                )
-                .foregroundColor(.white).opacity(0.8)
-                .frame(width: 50)
-                .frame(width: 60)
-                .focused($isFocused)  // <-- We'll track focus
-
-            }
-            .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(lineWidth: 5)
-                        .foregroundColor(Color("NeomorphBG4").opacity(0.7))
-                        .frame(width: 156, height: 60)
-                    
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 9)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        Color("NeomorphBG2").opacity(0.6),
-                                        Color("NeomorphBG2").opacity(0.6)
-                                    ]),
-                                    startPoint: .bottom,
-                                    endPoint: .topTrailing
+    struct SetsField: View {
+        let exercise: Exercise
+        let evm: ExerciseViewModel
+        private let maxSets: Int = 15
+        private let minSets: Int = 1
+        
+        // Use StateObject for persistent state across view updates
+        @StateObject private var fieldState = NumericFieldState()
+        @State private var isInitialized = false
+        
+        // Keep focus state local to prevent cascading updates
+        @FocusState private var isFocused: Bool
+        
+        var body: some View {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Sets:")
+                        .foregroundColor(.white.opacity(0.8))
+                    TextField("Sets", text: $fieldState.text)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.center)
+                        .padding(.vertical, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(Color.black.opacity(0.2))
+                        )
+                        .foregroundColor(.white.opacity(0.8))
+                        .frame(width: 60)
+                        .focused($isFocused)
+                        .onChange(of: fieldState.text) { newValue in
+                            if isInitialized {
+                                fieldState.validate(
+                                    value: newValue,
+                                    minValue: minSets,
+                                    maxValue: maxSets,
+                                    exercise: exercise,
+                                    evm: evm,
+                                    updateField: { viewModel, recordID, newSets in
+                                        // Only update if value changed
+                                        if newSets != exercise.sets {
+                                            // Use the "quiet" update method
+                                            viewModel.updateExerciseWithoutRefresh(
+                                                recordID: recordID,
+                                                newSets: newSets
+                                            )
+                                        }
+                                    }
                                 )
-                            )
-                            .frame(width: 143, height: 46)
-                    }
+                            }
+                        }
                 }
-            )
-            // Display error message if one exists.
-            if let errorMessage = errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundColor(.red)
-            }
-        }
-        .onAppear {
-            // Initialize the text field with the current sets value.
-            localText = exercise.sets == 0 ? "" : String(exercise.sets)
-        }
-        .onChange(of: localText) { newValue in
-            // Cancel any pending update.
-            debouncedWorkItem?.cancel()
-            
-            let workItem = DispatchWorkItem {
-                // If the text field is empty, clear any error and do nothing.
-                guard !newValue.isEmpty else {
-                    errorMessage = nil
-                    return
-                }
+                .background(
+                    // Simplified background to avoid gradient issues
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color("NeomorphBG2").opacity(0.6))
+                        .frame(width: 156, height: 60)
+                )
                 
-                // Validate input is an integer.
-                if let newSets = Int(newValue) {
-                    // Enforce minimum number of sets.
-                    if newSets < minSets {
-                        errorMessage = "Minimum allowed sets is \(minSets)"
-                        return
-                    }
-                    // Enforce maximum number of sets.
-                    if newSets > maxSets {
-                        errorMessage = "Maximum allowed sets is \(maxSets)"
-                        return
-                    }
-                    
-                    // Input is valid—clear any previous error.
-                    errorMessage = nil
-                    // Only update if the new value differs from the current model.
-                    if newSets != exercise.sets, let recordID = exercise.recordID {
-                        evm.updateExercise(recordID: recordID, newSets: newSets)
-                    }
-                } else {
-                    // Show an error if the input isn't a valid number.
-                    errorMessage = "Please enter a valid number."
+                // Display error message if one exists
+                if let errorMessage = fieldState.errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.red)
                 }
             }
-            
-            debouncedWorkItem = workItem
-            // Schedule the update after 0.5 seconds of inactivity.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+            .onAppear {
+                // Initialize once to prevent duplicate updates
+                if !isInitialized {
+                    fieldState.text = exercise.sets == 0 ? "" : String(exercise.sets)
+                    // Use a slight delay to mark as initialized
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        isInitialized = true
+                    }
+                }
+            }
+            // Add a stable identity to this view
+            .id("Exercise-\(exercise.id)-SetsField")
+            // Add a toolbar with Done button for numeric keyboard
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        isFocused = false
+                    }
+                }
+            }
         }
     }
-}
+
+    // Also create a matching RepsField implementation
+    struct RepsField: View {
+        let exercise: Exercise
+        let evm: ExerciseViewModel
+        private let maxReps: Int = 100
+        private let minReps: Int = 1
+        
+        // Use StateObject for persistent state across view updates
+        @StateObject private var fieldState = NumericFieldState()
+        @State private var isInitialized = false
+        
+        // Keep focus state local to prevent cascading updates
+        @FocusState private var isFocused: Bool
+        
+        var body: some View {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Reps:")
+                        .foregroundColor(.white.opacity(0.8))
+                    TextField("Reps", text: $fieldState.text)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.center)
+                        .padding(.vertical, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(Color.black.opacity(0.2))
+                        )
+                        .foregroundColor(.white.opacity(0.8))
+                        .frame(width: 60)
+                        .focused($isFocused)
+                        .onChange(of: fieldState.text) { newValue in
+                            if isInitialized {
+                                fieldState.validate(
+                                    value: newValue,
+                                    minValue: minReps,
+                                    maxValue: maxReps,
+                                    exercise: exercise,
+                                    evm: evm,
+                                    updateField: { viewModel, recordID, newReps in
+                                        // Only update if value changed
+                                        if newReps != exercise.reps {
+                                            // Use the "quiet" update method
+                                            viewModel.updateExerciseWithoutRefresh(
+                                                recordID: recordID,
+                                                newReps: newReps
+                                            )
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                }
+                .background(
+                    // Simplified background to avoid gradient issues
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color("NeomorphBG2").opacity(0.6))
+                        .frame(width: 156, height: 60)
+                )
+                
+                // Display error message if one exists
+                if let errorMessage = fieldState.errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+            }
+            .onAppear {
+                // Initialize once to prevent duplicate updates
+                if !isInitialized {
+                    fieldState.text = exercise.reps == 0 ? "" : String(exercise.reps)
+                    // Use a slight delay to mark as initialized
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        isInitialized = true
+                    }
+                }
+            }
+            // Add a stable identity to this view
+            .id("Exercise-\(exercise.id)-RepsField")
+            // Add a toolbar with Done button for numeric keyboard
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        isFocused = false
+                    }
+                }
+            }
+        }
+    }
 struct WorkoutNameField: View {
     let workout: WorkoutModel
     let evm: WorkoutViewModel
@@ -869,12 +980,6 @@ struct WorkoutNameField: View {
                             }
                         }
                     )
-             
-      
-
-     
-        
-
         .onAppear {
             // Initialize the text field with the current workout name
             localText = workout.name
@@ -885,185 +990,57 @@ struct WorkoutNameField: View {
 struct ExerciseNameField: View {
     let exercise: Exercise
     let evm: ExerciseViewModel
-
-    // Local state for the text field's current value.
-    @State private var localText: String = ""
-    // A debouncing work item to delay the update.
-    @State private var debouncedWorkItem: DispatchWorkItem?
-
+    
+    // IMPORTANT: Use @StateObject for a publisher that persists across view updates
+    @StateObject private var textState = TextFieldState()
+    
+    // Track if initialization is complete
+    @State private var isInitialized = false
+    
     var body: some View {
         HStack {
             Text("Name:")
-                .foregroundColor(.white).opacity(0.8)
-            TextField("Exercise Name", text: $localText)
-                .multilineTextAlignment(.center)      // Centers the text horizontally
-                .padding(.vertical, 4)               // Some vertical padding inside the field
+                .foregroundColor(.white.opacity(0.8))
+            
+            TextField("Exercise Name", text: $textState.text)
+                .multilineTextAlignment(.center)
+                .padding(.vertical, 4)
                 .background(
                     RoundedRectangle(cornerRadius: 5)
-                        .fill(Color(.black).opacity(0.2))
+                        .fill(Color.black.opacity(0.2))
                 )
-                .foregroundColor(.white).opacity(0.8)
+                .foregroundColor(.white.opacity(0.8))
                 .frame(width: 200)
+                // Key improvement: Disable autocorrection that can cause focus issues
+                .autocorrectionDisabled(true)
+                .textInputAutocapitalization(.never)
+                // Make sure changes don't affect the view hierarchy
+                .onChange(of: textState.text) { newValue in
+                    if isInitialized {
+                        // Instead of updating directly, schedule an update
+                        textState.scheduleUpdate(newText: newValue, exercise: exercise, evm: evm)
+                    }
+                }
         }
         .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(lineWidth: 5)
-                    .foregroundColor(Color("NeomorphBG4").opacity(0.7))
-                    .frame(width: 286, height: 60)
-                
-                ZStack {
-                    RoundedRectangle(cornerRadius: 9)
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color("NeomorphBG2").opacity(0.6),
-                                    Color("NeomorphBG2").opacity(0.6)
-                                ]),
-                                startPoint: .bottom,
-                                endPoint: .topTrailing
-                            )
-                        )
-                        .frame(width: 273, height: 46)
-                    
-          
-                }
-            }
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color("NeomorphBG2").opacity(0.6))
+                .frame(width: 286, height: 60)
         )
         .onAppear {
-            // Initialize the text field with the current exercise name.
-            localText = exercise.name
-        }
-        .onChange(of: localText) { newValue in
-            // Cancel any pending update.
-            debouncedWorkItem?.cancel()
-            
-            // Create a new work item to update the exercise name.
-            let workItem = DispatchWorkItem {
-                if let recordID = exercise.recordID {
-                    evm.updateExercise(recordID: recordID, newName: newValue)
-                }
-            }
-            debouncedWorkItem = workItem
-            
-            // Schedule the update after a short delay (0.5 seconds).
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
-        }
-    }
-}
-
-
-struct RepsField: View {
-    let exercise: Exercise
-    let evm: ExerciseViewModel
-    private let minReps: Int = 1
-
-    // Local state for the text field's current value.
-    @State private var localText: String = ""
-    // A debouncing work item to delay updates.
-    @State private var debouncedWorkItem: DispatchWorkItem?
-    // An optional error message for invalid input.
-    @State private var errorMessage: String? = nil
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Reps:")
-                    .foregroundColor(.white).opacity(0.8)
-                TextField(
-                    "Reps",
-                    text: $localText
-                )
-                .keyboardType(.numberPad)
-                .multilineTextAlignment(.center)      // Centers the text horizontally
-                .padding(.vertical, 4)               // Some vertical padding inside the field
-                .background(
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(Color(.black).opacity(0.2))
-                )
-                .foregroundColor(.white).opacity(0.8)
-                .frame(width: 60)
-                .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button("Done") {
-                            UIApplication.shared.sendAction(
-                                #selector(UIResponder.resignFirstResponder),
-                                to: nil, from: nil, for: nil)
-                        }
-                    }
-                }
-            }
-            .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(lineWidth: 5)
-                        .foregroundColor(Color("NeomorphBG4").opacity(0.7))
-                        .frame(width: 156, height: 60)
-                    
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 9)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        Color("NeomorphBG2").opacity(0.6),
-                                        Color("NeomorphBG2").opacity(0.6)
-                                    ]),
-                                    startPoint: .bottom,
-                                    endPoint: .topTrailing
-                                )
-                            )
-                            .frame(width: 143, height: 46)
-                        
-              
-                    }
-                }
-            )
-            // Display an error message if necessary.
-            if let errorMessage = errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundColor(.red)
-            }
-        }
-        .onAppear {
-            // Initialize the text field with the current reps value.
-            localText = exercise.reps == 0 ? "" : String(exercise.reps)
-        }
-        .onChange(of: localText) { newValue in
-            // Cancel any pending update.
-            debouncedWorkItem?.cancel()
-            
-            let workItem = DispatchWorkItem {
-                // If the field is empty, clear errors and do nothing.
-                guard !newValue.isEmpty else {
-                    errorMessage = nil
-                    return
-                }
+            // Only initialize once
+            if !isInitialized {
+                textState.text = exercise.name
                 
-                // Validate that the new value is an integer.
-                if let newReps = Int(newValue) {
-                    // Enforce a minimum value.
-                    if newReps < minReps {
-                        errorMessage = "Minimum allowed reps is \(minReps)"
-                        return
-                    }
-                    
-                    // Input is valid—clear any previous error.
-                    errorMessage = nil
-                    // Only update if the new value is different.
-                    if newReps != exercise.reps, let recordID = exercise.recordID {
-                        evm.updateExercise(recordID: recordID, newReps: newReps)
-                    }
-                } else {
-                    errorMessage = "Please enter a valid number."
+                // Mark initialization complete after a brief delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    isInitialized = true
                 }
             }
-            
-            debouncedWorkItem = workItem
-            // Schedule the update after 0.5 seconds of inactivity.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
         }
+        // THIS IS IMPORTANT: Prevent focus changes from cascading to parent view
+        .id("Exercise-\(exercise.id)-NameField")
+        .allowsHitTesting(true)
     }
 }
 

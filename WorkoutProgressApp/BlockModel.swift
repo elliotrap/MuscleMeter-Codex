@@ -13,18 +13,20 @@ import SwiftUI
 struct WorkoutBlock: Identifiable {
     var blockID: CKRecord.ID?
     var title: String
+    var order: Int // New property to track block order
     
     // Conform to Identifiable by defining `var id: CKRecord.ID?`
-    // if you still want to be Identifiable:
     var id: CKRecord.ID? { blockID }
     
     init(record: CKRecord) {
         self.blockID = record.recordID
         self.title = record["title"] as? String ?? ""
+        self.order = record["order"] as? Int ?? 0
     }
     
-    init(title: String) {
+    init(title: String, order: Int = 0) {
         self.title = title
+        self.order = order
     }
     
     func toCKRecord() -> CKRecord {
@@ -35,6 +37,7 @@ struct WorkoutBlock: Identifiable {
             record = CKRecord(recordType: "WorkoutBlock")
         }
         record["title"] = title as CKRecordValue
+        record["order"] = order as CKRecordValue
         return record
     }
 }
@@ -45,34 +48,97 @@ struct WorkoutBlock: Identifiable {
 
 class WorkoutBlockManager: ObservableObject {
     @Published var blocks: [WorkoutBlock] = []
+    @Published var isEditingBlockIndex: Bool = false
+    @Published var blockBeingMoved: WorkoutBlock? = nil
     
     let privateDB = CKContainer.default().privateCloudDatabase
-    
-    // Fetch all blocks from CloudKit.
+    private var isFetchingBlocks = false
+
+    // Fetch all blocks from CloudKit with duplicate prevention
     func fetchBlocks() {
-        let predicate = NSPredicate(value: true)
-        let query = CKQuery(recordType: "WorkoutBlock", predicate: predicate)
+        // Guard against duplicate fetches
+        guard !isFetchingBlocks else {
+            print("🔄 FETCH: Already fetching blocks, skipping duplicate request")
+            return
+        }
         
-        privateDB.perform(query, inZoneWith: nil) { records, error in
+        // Set flag to indicate fetch is in progress
+        isFetchingBlocks = true
+        
+        print("🔍 FETCH: Starting fetchBlocks")
+        
+        // Create a query for all WorkoutBlock records
+        let query = CKQuery(recordType: "WorkoutBlock", predicate: NSPredicate(value: true))
+        
+        // Fetch the records from CloudKit
+        privateDB.perform(query, inZoneWith: nil) { [weak self] (records, error) in
+            // Ensure we reset the flag in all completion paths
+            defer {
+                DispatchQueue.main.async {
+                    self?.isFetchingBlocks = false
+                }
+            }
+            
+            guard let self = self else {
+                print("❌ FETCH: Self reference lost")
+                return
+            }
+            
             if let error = error {
-                print("Error fetching blocks: \(error.localizedDescription)")
+                print("❌ FETCH: Error fetching blocks: \(error.localizedDescription)")
                 return
             }
             
             if let records = records {
+                print("✅ FETCH: Retrieved \(records.count) records from CloudKit")
+                
+                // Check if records have order field
+                for (index, record) in records.enumerated() {
+                    if let orderValue = record["order"] as? Int {
+                        print("📋 FETCH: Record \(index) has order: \(orderValue), title: \(record["title"] as? String ?? "unknown")")
+                    } else {
+                        print("⚠️ FETCH: Record \(index) is MISSING order field! title: \(record["title"] as? String ?? "unknown")")
+                    }
+                }
+                
+                // Convert CKRecords to WorkoutBlock objects
+                let fetchedBlocks = records.compactMap { WorkoutBlock(record: $0) }
+                print("📦 FETCH: Converted to \(fetchedBlocks.count) WorkoutBlock objects")
+                
+                // Log blocks before sorting
+                print("📊 FETCH: Before sorting:")
+                for (index, block) in fetchedBlocks.enumerated() {
+                    print("   Block \(index): '\(block.title)' with order: \(block.order)")
+                }
+                
+                // Sort blocks by order property
+                let sortedBlocks = fetchedBlocks.sorted { $0.order < $1.order }
+                
+                // Log blocks after sorting
+                print("📊 FETCH: After sorting:")
+                for (index, block) in sortedBlocks.enumerated() {
+                    print("   Block \(index): '\(block.title)' with order: \(block.order)")
+                }
+                
+                // Update UI on main thread
                 DispatchQueue.main.async {
-                    self.blocks = records.map { WorkoutBlock(record: $0) }
-                    print("Successfully fetched \(records.count) blocks from CloudKit.")
+                    print("🔄 FETCH: Updating blocks array on main thread")
+                    self.blocks = sortedBlocks
+                    print("✅ FETCH: Completed with \(sortedBlocks.count) sorted blocks")
                 }
             } else {
-                print("Fetch completed: No records found for WorkoutBlock.")
+                print("ℹ️ FETCH: No blocks found")
             }
         }
     }
     
     // Add a new block.
     func addBlock(title: String) {
-        let block = WorkoutBlock(title: title)
+        // Determine the order for the new block (place it at the end)
+        let newOrder = blocks.count
+        
+        // Create the block with the order
+        let block = WorkoutBlock(title: title, order: newOrder)
         let record = block.toCKRecord()
         
         privateDB.save(record) { savedRecord, error in
@@ -85,7 +151,7 @@ class WorkoutBlockManager: ObservableObject {
                 let savedBlock = WorkoutBlock(record: savedRecord)
                 DispatchQueue.main.async {
                     self.blocks.append(savedBlock)
-                    print("Successfully added block: \(savedBlock.title)")
+                    print("Successfully added block: \(savedBlock.title) with order: \(savedBlock.order)")
                 }
             } else {
                 print("Error: No record returned after saving block.")
@@ -147,7 +213,7 @@ class WorkoutBlockManager: ObservableObject {
         }
     }
     
-
+    
     
     // MARK: - Update Workout Block Association
     func updateWorkoutBlock(workout: WorkoutModel, newBlock: String, completion: @escaping (Bool) -> Void) {
@@ -183,6 +249,98 @@ class WorkoutBlockManager: ObservableObject {
             }
         }
     }
+    
+
+
+    // In WorkoutBlockManager class
+    func updateBlocksOrder(_ newOrderedBlocks: [WorkoutBlock]) {
+        print("🔄 UPDATE: Starting updateBlocksOrder with \(newOrderedBlocks.count) blocks")
+        
+        // Log the order of blocks before updating
+        print("📊 UPDATE: Original blocks order:")
+        for (index, block) in blocks.enumerated() {
+            print("   Block \(index): '\(block.title)' with order: \(block.order)")
+        }
+        
+        // Log the new order being applied
+        print("📊 UPDATE: New blocks order to be applied:")
+        for (index, block) in newOrderedBlocks.enumerated() {
+            print("   Block \(index): '\(block.title)' with current order: \(block.order)")
+        }
+        
+        // Update order property for each block
+        var updatedBlocks = newOrderedBlocks
+        for i in 0..<updatedBlocks.count {
+            var block = updatedBlocks[i]
+            // Store previous order for debugging
+            let previousOrder = block.order
+            // Update order to match position in array
+            block.order = i
+            updatedBlocks[i] = block
+            
+            print("🔢 UPDATE: Setting block '\(block.title)' order from \(previousOrder) to \(i)")
+        }
+        
+        // Update the blocks array with the new order
+        self.blocks = updatedBlocks
+        
+        print("📊 UPDATE: Final blocks order in memory:")
+        for (index, block) in blocks.enumerated() {
+            print("   Block \(index): '\(block.title)' with order: \(block.order)")
+        }
+        
+        // Save all blocks to CloudKit with their new order
+        let container = CKContainer.default()
+        let database = container.privateCloudDatabase
+        
+        var recordsToSave: [CKRecord] = []
+        
+        // Prepare all records to be saved
+        for block in blocks {
+            let record = block.toCKRecord()
+            // Verify the order field is being set in the record
+            print("💾 UPDATE: Preparing to save block '\(block.title)' with order: \(block.order)")
+            print("   Record has order field: \(record["order"] != nil ? "YES" : "NO")")
+            if let orderValue = record["order"] as? Int {
+                print("   Record order value: \(orderValue)")
+            }
+            recordsToSave.append(record)
+        }
+        
+        print("📤 UPDATE: Saving \(recordsToSave.count) records to CloudKit")
+        
+        // Use a batch operation to save all records at once
+        let operation = CKModifyRecordsOperation(recordsToSave: recordsToSave, recordIDsToDelete: nil)
+        operation.savePolicy = .changedKeys
+        operation.qualityOfService = .userInitiated
+        
+        operation.modifyRecordsCompletionBlock = { savedRecords, deletedRecordIDs, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("❌ UPDATE: Error updating block orders: \(error.localizedDescription)")
+                    if let ckError = error as? CKError {
+                        print("   CloudKit error code: \(ckError.errorCode)")
+                        if let serverErrorMessage = ckError.userInfo["ServerErrorDescription"] as? String {
+                            print("   Server error message: \(serverErrorMessage)")
+                        }
+                    }
+                } else {
+                    print("✅ UPDATE: Successfully saved \(savedRecords?.count ?? 0) block records")
+                    if let savedRecords = savedRecords {
+                        for (index, record) in savedRecords.enumerated() {
+                            if let title = record["title"] as? String, let order = record["order"] as? Int {
+                                print("   Saved record \(index): '\(title)' with order: \(order)")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        database.add(operation)
+        print("🔄 UPDATE: Operation added to database queue")
+    }
+    
     
 }
 

@@ -36,7 +36,7 @@ struct ContentView: View {
 struct MainAppView: View {
     @EnvironmentObject var blockManager: WorkoutBlockManager
     @Binding var isAuthenticated: Bool
-    @ObservedObject var exerciseModel = ExerciseViewModel(workoutID: CKRecord.ID(recordName: "defaultWorkout"))
+    @ObservedObject var exerciseModel = ExerciseViewModel(workoutID: CKRecord.ID(recordName: "UserWorkout"))
     @ObservedObject var cm = ComparisonViewModel()
     @ObservedObject var vm = ViewModel()
     @State private var showOneRMCalculator = false
