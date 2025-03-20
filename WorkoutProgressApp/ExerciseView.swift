@@ -32,11 +32,12 @@ struct ExercisesView: View {
     // Add these properties to your view
     @State private var isLoading = false
     @State private var hasAttemptedLoad = false
-
+    
     
     init(workoutID: CKRecord.ID) {
         self.viewModel = ExerciseViewModel(workoutID: workoutID)
     }
+    
     
     var body: some View {
         ZStack {
@@ -107,6 +108,11 @@ struct ExercisesView: View {
                     }
                 }
         }
+        // Add this to the end of your body:
+        .onDisappear {
+            print("ExercisesView disappeared, cleaning up resources")
+            viewModel.unsubscribeFromCloudKitChanges()
+        }
     }
     
     private var mainContent: some View {
@@ -126,7 +132,7 @@ struct ExercisesView: View {
     }
     
     
-
+    
     private var exercisesListView: some View {
         // Wrapper for the entire list
         return ZStack {
@@ -245,9 +251,9 @@ struct ExercisesView: View {
             ExerciseViewModel.clearOperationsForWorkout(viewModel.workoutID.recordName)
         }
     }
-
-
-
+    
+    
+    
     // Helper to check if we should expect exercises for this workout
     private func shouldHaveExercises() -> Bool {
         let workoutIDString = viewModel.workoutID.recordName
@@ -259,7 +265,7 @@ struct ExercisesView: View {
         
         return false
     }
-
+    
     // Add this helper function to your view
     private func needsFreshData() -> Bool {
         // Logic to determine if we need fresh data:
@@ -287,7 +293,7 @@ struct ExercisesView: View {
     }
     
     
-
+    
     // Empty state view
     private var emptyStateView: some View {
         VStack(spacing: 16) {
@@ -308,7 +314,7 @@ struct ExercisesView: View {
         .frame(maxWidth: .infinity, minHeight: 200)
         .padding(.vertical, 40)
     }
-
+    
     // Regular content with exercises
     private var exercisesContentView: some View {
         ScrollView {
@@ -324,33 +330,54 @@ struct ExercisesView: View {
                 
                 // List all exercises with insertion points
                 ForEach(Array(viewModel.exercises.enumerated()), id: \.element.id) { (localIndex, exercise) in
-                    // Exercise card
-                    ExerciseCardView(
-                        exercise: exercise,
-                        evm: viewModel,
-                        onRequestMove: { exercise in
-                            selectedToMove = exercise
-                            print("DEBUG: onRequestMove called for \(exercise.name)")
-                            viewModel.refreshID = UUID() // Force view refresh
-                        }
-                    )
-                    .id("\(viewModel.refreshID)-card-\(exercise.id)")
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 2)
-                    
-                    // If we're moving an exercise, show insertion points between exercises
-                    if let movingExercise = selectedToMove,
-                       movingExercise.id != exercise.id,
-                       localIndex < viewModel.exercises.count - 1 {
-                        let nextExercise = viewModel.exercises[localIndex + 1]
+                    VStack(spacing: 0) {
+                        // Exercise card
+                        ExerciseCardView(
+                            exercise: exercise,
+                            evm: viewModel,
+                            onRequestMove: { exercise in
+                                selectedToMove = exercise
+                                print("DEBUG: onRequestMove called for \(exercise.name)")
+                                viewModel.refreshID = UUID() // Force view refresh
+                            }
+                        )
+                        .id("\(viewModel.refreshID)-card-\(exercise.id)")
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 2)
                         
-                        // Don't show insertion point if moving exercise is already at this position
-                        if movingExercise.id != nextExercise.id {
-                            insertionButton(
-                                position: "after",
-                                exercise: exercise,
-                                targetIndex: localIndex + 1
-                            )
+                        // Show cancel button directly under the exercise being moved
+                        if let movingExercise = selectedToMove, movingExercise.id == exercise.id {
+                            Button(action: {
+                                selectedToMove = nil
+                                viewModel.refreshID = UUID()
+                            }) {
+                                HStack {
+                                    Image(systemName: "xmark.circle")
+                                        .foregroundColor(.red)
+                                    Text("Cancel Moving \(exercise.name)")
+                                        .foregroundColor(.red)
+                                        .fontWeight(.medium)
+                                }
+                                .padding(.vertical, 8)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+                        }
+                        
+                        // If we're moving an exercise, show insertion points between exercises
+                        if let movingExercise = selectedToMove,
+                           movingExercise.id != exercise.id,
+                           localIndex < viewModel.exercises.count - 1 {
+                            let nextExercise = viewModel.exercises[localIndex + 1]
+                            
+                            // Don't show insertion point if moving exercise is already at this position
+                            if movingExercise.id != nextExercise.id {
+                                insertionButton(
+                                    position: "after",
+                                    exercise: exercise,
+                                    targetIndex: localIndex + 1
+                                )
+                            }
                         }
                     }
                 }
@@ -366,21 +393,6 @@ struct ExercisesView: View {
                         targetIndex: viewModel.exercises.count
                     )
                     .padding(.top, 8)
-                }
-                
-                // Add a cancel button when in movement mode
-                if selectedToMove != nil {
-                    Button(action: {
-                        selectedToMove = nil
-                        viewModel.refreshID = UUID()
-                    }) {
-                        Text("Cancel Move")
-                            .foregroundColor(.red)
-                            .fontWeight(.medium)
-                            .padding(.vertical, 8)
-                    }
-                    .buttonStyle(BorderedButtonStyle())
-                    .padding(.top, 16)
                 }
             }
             .padding(.vertical, 16)
@@ -441,7 +453,7 @@ struct ExercisesView: View {
                     
                     // Reset movement state and refresh UI
                     selectedToMove = nil
-                                                viewModel.refreshID = UUID()
+                    viewModel.refreshID = UUID()
                 }
             }) {
                 HStack {
@@ -453,11 +465,11 @@ struct ExercisesView: View {
                 .foregroundColor(.blue)
                 .padding(.vertical, 8)
             }
-            .id("exercise-insertion-\(position)-\(targetIndex)-\(                            viewModel.refreshID)")
-            .padding(.horizontal, 16)
+                .id("exercise-insertion-\(position)-\(targetIndex)-\(viewModel.refreshID)")
+                .padding(.horizontal, 16)
         )
     }
-
+    
     // MARK: - Move Exercise Logic
     private func moveExercise(moving: Exercise, newIndex: Int) {
         // Find the current index
@@ -493,16 +505,22 @@ struct ExercisesView: View {
         // Update the model with the new exercise order
         viewModel.exercises = updatedExercises
         
-        // Save the updated indices to your database
-        viewModel.updateExerciseSortIndices(updatedExercises)
-        
         // Print the new sort order for debugging
         print("DEBUG: New exercise order:")
         for (i, ex) in updatedExercises.enumerated() {
             print("  \(i): \(ex.name) (sortIndex: \(ex.sortIndex))")
         }
+        
+        // Save the updated indices to CloudKit
+        viewModel.updateExerciseSortIndices(updatedExercises)
+        
+        // Force refresh and sorting
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            viewModel.sortExercises()
+            viewModel.refreshID = UUID() // Force UI refresh
+        }
     }
-
+    
     // MARK: - Special function to move an exercise to the end
     private func moveExerciseToEnd(moving: Exercise) {
         // Find the current index
@@ -547,14 +565,12 @@ struct ExercisesView: View {
 }
 
 
-
 struct AddExerciseView: View {
     @ObservedObject var viewModel: ExerciseViewModel
     @Environment(\.dismiss) var dismiss
     @State private var exerciseName = ""
     @State private var setsText = ""
     @State private var repsText = ""
-    // Add this for keyboard handling
     @FocusState private var focusedField: Field?
     
     // For focus management
@@ -562,149 +578,131 @@ struct AddExerciseView: View {
         case name, sets, reps
     }
     
-    // Add this callback
     var onExerciseAdded: (() -> Void)? = nil
     
     var body: some View {
-        ZStack {
-            VStack {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Title at the top
-                        Text("Add Exercise")
-                            .font(.title)
-                            .padding(.top, 20)
+        VStack(spacing: 0) {
+            // Header
+            Text("Add Exercise")
+                .font(.title)
+                .padding(.top, 20)
+                .padding(.bottom, 10)
+            
+            // Main content in ScrollView
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Form fields
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Exercise Details").font(.headline)
                         
-                        // Form fields
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Exercise Details").font(.headline)
-                            
-                            TextField("Exercise name", text: $exerciseName)
-                                .padding()
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(8)
-                                .focused($focusedField, equals: .name)
-                            
-                            TextField("Sets", text: $setsText)
-                                .padding()
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(8)
-                                .keyboardType(.numberPad)
-                                .focused($focusedField, equals: .sets)
-                            
-                            TextField("Reps", text: $repsText)
-                                .padding()
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(8)
-                                .keyboardType(.numberPad)
-                                .focused($focusedField, equals: .reps)
-                        }
-                        .padding()
+                        TextField("Exercise name", text: $exerciseName)
+                            .padding()
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(8)
+                            .focused($focusedField, equals: .name)
                         
-                        // Save button - fixed at the bottom of the ScrollView
-                        saveButton
-                            .padding(.bottom, 20)
+                        TextField("Sets", text: $setsText)
+                            .padding()
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(8)
+                            .keyboardType(.numberPad)
+                            .focused($focusedField, equals: .sets)
                         
-                        Spacer()
-                        
-                    }
-                }
-                
-                // Cancel button in toolbar
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button("Cancel") {
-                            dismiss()
-                        }
+                        TextField("Reps", text: $repsText)
+                            .padding()
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(8)
+                            .keyboardType(.numberPad)
+                            .focused($focusedField, equals: .reps)
                     }
                     
-                    // Add a keyboard dismissal button
-                    ToolbarItem(placement: .keyboard) {
-                        Button("Done") {
-                            focusedField = nil
-                        }
+                    Spacer(minLength: 40)
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 20)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            
+            // Save button - fixed at the bottom
+            saveButton
+                .padding(.vertical, 16)
+                .padding(.horizontal)
+        }
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Cancel") {
+                    dismiss()
+                }
+            }
+            
+            ToolbarItem(placement: .keyboard) {
+                HStack {
+                    Spacer()
+                    
+                    Button("Done") {
+                        focusedField = nil
                     }
                 }
             }
         }
-        // This modifier helps prevent the keyboard from pushing content
-        .ignoresSafeArea(.keyboard)
     }
     
-    // Extract the save button to a computed property
     private var saveButton: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 7)
-                .fill(Color.gray.opacity(0.12))
-                .frame(maxWidth: 350)
-                .frame(height: 60)
-                .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 2)
+        Button(action: {
+            guard
+                !exerciseName.isEmpty,
+                let sets = Int(setsText),
+                let reps = Int(repsText)
+            else { return }
             
-            // In your AddExerciseView
-            Button(action: {
-                guard
-                    !exerciseName.isEmpty,
-                    let sets = Int(setsText),
-                    let reps = Int(repsText)
-                else { return }
-                
-                let setWeights = Array(repeating: 0.0, count: sets)
-                let setCompletions = Array(repeating: false, count: sets)
-                
-                // Show loading state if you have one
-                viewModel.isLoading = true
-                
-                // Pass a completion handler to execute after CloudKit operation
-                viewModel.addExercise(
-                    name: exerciseName,
-                    sets: sets,
-                    reps: reps,
-                    setWeights: setWeights,
-                    setCompletions: setCompletions
-                ) {
-                    // This runs after the CloudKit operation completes
-                    DispatchQueue.main.async {
-                        // Hide loading state
-                        viewModel.isLoading = false
-                        
-                        // Call parent view callback
-                        onExerciseAdded?()
-                        
-                        // Dismiss the sheet after everything is done
-                        dismiss()
-                    }
+            let setWeights = Array(repeating: 0.0, count: sets)
+            let setCompletions = Array(repeating: false, count: sets)
+            
+            // Show loading state
+            viewModel.isLoading = true
+            
+            viewModel.addExercise(
+                name: exerciseName,
+                sets: sets,
+                reps: reps,
+                setWeights: setWeights,
+                setCompletions: setCompletions
+            ) {
+                DispatchQueue.main.async {
+                    viewModel.isLoading = false
+                    onExerciseAdded?()
+                    dismiss()
                 }
-            }) {
-                // Button content
-                HStack {
-                    Text("Save Exercise")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    
-                    if viewModel.isLoading {
-                        Spacer()
-                        ProgressView()
-                            .tint(.white)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(
-                    !exerciseName.isEmpty &&
-                    !setsText.isEmpty && Int(setsText) != nil &&
-                    !repsText.isEmpty && Int(repsText) != nil ?
-                    Color.blue : Color.gray
-                )
-                .cornerRadius(10)
             }
-            .disabled(
-                exerciseName.isEmpty ||
-                setsText.isEmpty || Int(setsText) == nil ||
-                repsText.isEmpty || Int(repsText) == nil ||
-                viewModel.isLoading  // Disable while loading
+        }) {
+            HStack {
+                Text("Save Exercise")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                
+                if viewModel.isLoading {
+                    Spacer()
+                    ProgressView()
+                        .tint(.white)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(
+                !exerciseName.isEmpty &&
+                !setsText.isEmpty && Int(setsText) != nil &&
+                !repsText.isEmpty && Int(repsText) != nil ?
+                Color.blue : Color.gray
             )
-
+            .cornerRadius(10)
         }
+        .disabled(
+            exerciseName.isEmpty ||
+            setsText.isEmpty || Int(setsText) == nil ||
+            repsText.isEmpty || Int(repsText) == nil ||
+            viewModel.isLoading
+        )
     }
 }
 
@@ -1317,27 +1315,29 @@ struct SetRowView: View {
                 // Guard against out-of-range access.
                 guard index < exercise.setCompletions.count else { return }
                 
-                var newCompletions = exercise.setCompletions
-                newCompletions[index].toggle()
                 if let recordID = exercise.recordID {
+                    // Get the most up-to-date completions
+                    var newCompletions = evm.getCurrentCompletions(for: exercise)
+                    newCompletions[index].toggle()
+                    
+                    // Update with optimistic UI
                     evm.updateExercise(recordID: recordID, newCompletions: newCompletions)
                 }
             } label: {
-                if index < exercise.setCompletions.count {
-                    Image(systemName: exercise.setCompletions[index] ? "checkmark.circle.fill" : "circle")
-                        .foregroundColor(exercise.setCompletions[index] ? .green : .white)
+                // Use the most current state for UI
+                let completions = evm.getCurrentCompletions(for: exercise)
+                if index < completions.count {
+                    Image(systemName: completions[index] ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(completions[index] ? .green : .white)
                         .opacity(0.8)
-                    
                 } else {
                     // Fallback: display a default icon.
                     Image(systemName: "circle")
                         .foregroundColor(.white)
                         .opacity(0.8)
-                    
                 }
             }
             .buttonStyle(.borderless)
-
             .background(
                 Color("NeomorphBG4").opacity(0.4)
                     .frame(width: 30, height: 30)

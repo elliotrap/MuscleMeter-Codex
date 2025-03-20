@@ -417,14 +417,21 @@ struct ExerciseCustomRoundedRectangle: View {
                 
          
                 
-                // Main accent rectangle
+                // Main accent rectangle with corrected gradient stop ordering
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(
                         LinearGradient(
                             gradient: Gradient(stops: [
-                                .init(color: accentColor,              location: 0.03),
-                                .init(color: accentColor.opacity(0.3), location: 0.015),
-                                .init(color: Color("NeomorphBG3").opacity(0.6), location: progress),
+                                // First stop - start with the lowest location value
+                                .init(color: accentColor, location: 0.0),
+                                
+                                // Second stop - ensures proper ordering with first stop
+                                .init(color: accentColor.opacity(0.3), location: 0.03),
+                                
+                                // Third stop - make sure it's always greater than second stop
+                                .init(color: Color("NeomorphBG3").opacity(0.6), location: max(0.04, progress)),
+                                
+                                // Final stop - always at the end
                                 .init(color: Color("NeomorphBG3").opacity(0.2), location: 1.0)
                             ]),
                             startPoint: .leading,
@@ -479,17 +486,21 @@ struct WorkoutCustomRoundedRectangle: View {
                     .blur(radius: 30)
             
             
-            // Main accent rectangle
+            // Main accent rectangle with fixed gradient stops
             RoundedRectangle(cornerRadius: cornerRadius)
                 .fill(
                     LinearGradient(
                         gradient: Gradient(stops: [
-                            // 0..progress: accent color
-                            .init(color: accentColor,              location: 0.08),
-                            .init(color: accentColor.opacity(0.3), location: progress),
+                            // First stop - always at the start
+                            .init(color: accentColor, location: 0.0),
                             
-                            // progress..1: “NeomorphBG3” to lighten the top portion
-                            .init(color: Color("NeomorphBG3").opacity(0.6), location: progress),
+                            // Second stop - use max to ensure ordering
+                            .init(color: accentColor.opacity(0.3), location: max(0.08, progress - 0.001)),
+                            
+                            // Third stop - slightly offset from second to avoid duplicate locations
+                            .init(color: Color("NeomorphBG3").opacity(0.6), location: max(0.08, progress)),
+                            
+                            // Final stop - always at the end
                             .init(color: Color("NeomorphBG3").opacity(0.3), location: 1.0)
                         ]),
                         startPoint: .bottom,
@@ -556,20 +567,20 @@ struct BlockCustomRoundedRectangle: View {
         }
     }
 }
+
+
 struct WeightField: View {
     let exercise: Exercise
     let index: Int
     let evm: ExerciseViewModel
-    @FocusState private var isFocused: Bool  // Focus for this field
     
-    // Local state to hold the current text value.
-    @State private var localText: String = ""
-    // Track whether we've initialized the field to prevent automatic updates
-    @State private var hasInitialized: Bool = false
-    // A debouncing work item.
-    @State private var debouncedWorkItem: DispatchWorkItem?
-
-    // A NumberFormatter to display the weight correctly.
+    // Focus state for this field
+    @FocusState private var isFocused: Bool
+    
+    // StateObject to persist state across view updates
+    @StateObject private var fieldState = WeightFieldState()
+    
+    // A NumberFormatter to display the weight correctly
     private let formatter: NumberFormatter = {
         let nf = NumberFormatter()
         nf.minimumFractionDigits = 0
@@ -580,75 +591,56 @@ struct WeightField: View {
     var body: some View {
         TextField(
             "lbs",
-            text: $localText
+            text: $fieldState.text
         )
         .keyboardType(.decimalPad)
-        .multilineTextAlignment(.center)      // Centers the text horizontally
-        .padding(.vertical, 4)               // Some vertical padding inside the field
+        .multilineTextAlignment(.center)
+        .padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color(.black).opacity(0.2))
+                .fill(Color.black.opacity(0.2))
         )
-        .foregroundColor(.white).opacity(0.8)
+        .foregroundColor(Color.white.opacity(0.8))
         .frame(width: 50)
-        .focused($isFocused)  // <-- We'll track focus
+        .focused($isFocused)
         .onAppear {
-            // Initialize the text field with the current weight, but only once
-            if !hasInitialized {
+            // Initialize field only if needed
+            if !fieldState.hasInitialized {
                 let weight = exercise.setWeights[index]
-                localText = weight == 0 ? "" : (formatter.string(from: NSNumber(value: weight)) ?? "")
-                hasInitialized = true
+                fieldState.text = weight == 0 ? "" : (formatter.string(from: NSNumber(value: weight)) ?? "")
+                fieldState.hasInitialized = true
+                fieldState.lastSubmittedValue = fieldState.text
             }
         }
-        // Only update when the text changes due to user input, not during rendering
-        .onChange(of: localText) { newValue in
-            // Only proceed if we've been initialized
-            guard hasInitialized else { return }
+        // Handle text changes with debounce
+        .onChange(of: fieldState.text) { newValue in
+            // Only proceed if initialized
+            guard fieldState.hasInitialized else { return }
             
-            // Cancel any pending update.
-            debouncedWorkItem?.cancel()
-            
-            // Create a new work item for the update.
-            let workItem = DispatchWorkItem {
-                // Convert the string to a double and update CloudKit.
-                if newValue.isEmpty {
-                    updateWeightValueIfChanged(for: exercise, at: index, newWeight: 0)
-                } else if let weightValue = Double(newValue) {
-                    updateWeightValueIfChanged(for: exercise, at: index, newWeight: weightValue)
-                }
-            }
-            debouncedWorkItem = workItem
-            
-            // Schedule the update after a 0.5-second delay.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+            // Schedule debounced update
+            fieldState.scheduleUpdate(
+                newValue: newValue,
+                exercise: exercise,
+                index: index,
+                evm: evm
+            )
         }
-        // Update when focus is lost to ensure changes are saved
+        // Handle focus changes
         .onChange(of: isFocused) { focused in
             if !focused {
-                // Focus was lost, update if needed
-                debouncedWorkItem?.cancel() // Cancel any pending debounced update
-                
-                if let weightValue = Double(localText) {
-                    updateWeightValueIfChanged(for: exercise, at: index, newWeight: weightValue)
-                } else if localText.isEmpty {
-                    updateWeightValueIfChanged(for: exercise, at: index, newWeight: 0)
-                }
+                // Focus was lost, submit immediately
+                fieldState.submitImmediate(
+                    exercise: exercise,
+                    index: index,
+                    evm: evm
+                )
             }
         }
-    }
-
-    // Only update if the value actually changed
-    private func updateWeightValueIfChanged(for exercise: Exercise, at index: Int, newWeight: Double) {
-        guard let recordID = exercise.recordID else { return }
-        
-        // Check if the value has actually changed to avoid unnecessary updates
-        if abs(exercise.setWeights[index] - newWeight) > 0.001 { // Use a small epsilon for floating point comparison
-            // Copy the current weights and update only the specified index.
-            var updatedWeights = exercise.setWeights
-            updatedWeights[index] = newWeight
-            
-            // Call the CloudKit update method.
-            evm.updateExercise(recordID: recordID, newWeights: updatedWeights)
+        // Add a stable identity to prevent focus issues
+        .id("WeightField-\(exercise.id)-\(index)")
+        // Disable animations that could trigger view rebuilds
+        .transaction { transaction in
+            transaction.animation = nil
         }
     }
 }
@@ -661,90 +653,73 @@ struct ActualRepsField: View {
     
     @Binding var isTextFieldVisible: Bool
     @FocusState private var isFocused: Bool
-    @State private var localText: String = ""
     
-    // Track whether we've initialized the field to prevent automatic updates
-    @State private var hasInitialized: Bool = false
-    @State private var debouncedWorkItem: DispatchWorkItem?
+    // StateObject to persist state across view updates
+    @StateObject private var fieldState = ActualRepsFieldState()
     
     var body: some View {
         HStack(spacing: 2) {
             Text("(")
-                .foregroundColor(.white).opacity(0.8)
+                .foregroundColor(.white.opacity(0.8))
             
-            TextField("", text: $localText)
-                .keyboardType(.decimalPad)
+            TextField("", text: $fieldState.text)
+                .keyboardType(.numberPad)
                 .multilineTextAlignment(.center)
                 .padding(.vertical, 4)
                 .background(
                     RoundedRectangle(cornerRadius: 5)
-                        .fill(Color(.black).opacity(0.2))
+                        .fill(Color.black.opacity(0.2))
                 )
-                .foregroundColor(.white).opacity(0.8)
+                .foregroundColor(.white.opacity(0.8))
                 .frame(width: 25)
                 .focused($isFocused)
                         
             Text(")")
-                .foregroundColor(.white).opacity(0.8)
+                .foregroundColor(.white.opacity(0.8))
         }
         .onAppear {
-            // Initialize the field with the current reps, but only once
-            if !hasInitialized {
+            // Initialize field only if needed
+            if !fieldState.hasInitialized {
                 let reps = exercise.setActualReps[index]
-                localText = reps == 0 ? "" : String(reps)
-                hasInitialized = true
+                fieldState.text = reps == 0 ? "" : String(reps)
+                fieldState.hasInitialized = true
+                fieldState.lastSubmittedValue = fieldState.text
             }
         }
-        // Only update when the text changes due to user input
-        .onChange(of: localText) { newValue in
-            // Only proceed if we've been initialized
-            guard hasInitialized else { return }
+        // Handle text changes with debounce
+        .onChange(of: fieldState.text) { newValue in
+            // Only proceed if initialized
+            guard fieldState.hasInitialized else { return }
             
-            // Cancel any pending update
-            debouncedWorkItem?.cancel()
-            
-            // Create a new work item for the update
-            let workItem = DispatchWorkItem {
-                // Convert the string to an int and update CloudKit
-                if newValue.isEmpty {
-                    updateActualReps(for: exercise, at: index, newReps: 0)
-                } else if let repsValue = Int(newValue) {
-                    updateActualReps(for: exercise, at: index, newReps: repsValue)
-                }
-            }
-            debouncedWorkItem = workItem
-            
-            // Schedule the update after a 0.5-second delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+            // Schedule debounced update
+            fieldState.scheduleUpdate(
+                newValue: newValue,
+                exercise: exercise,
+                index: index,
+                evm: evm
+            )
         }
-        // Update when focus is lost and handle plus icon visibility
+        // Handle focus changes
         .onChange(of: isFocused) { focused in
             if !focused {
-                // Focus was lost, update if needed
-                debouncedWorkItem?.cancel() // Cancel any pending debounced update
+                // Focus was lost, submit immediately and check if we should keep field visible
+                let shouldRemainVisible = fieldState.submitImmediate(
+                    exercise: exercise,
+                    index: index,
+                    evm: evm
+                )
                 
-                if let repsValue = Int(localText) {
-                    updateActualReps(for: exercise, at: index, newReps: repsValue)
-                } else if localText.isEmpty {
-                    updateActualReps(for: exercise, at: index, newReps: 0)
-                    isTextFieldVisible = false // Revert to plus icon when empty
+                // Update visibility if needed
+                if !shouldRemainVisible {
+                    isTextFieldVisible = false
                 }
             }
         }
-    }
-    
-    // Only update if the value has actually changed
-    private func updateActualReps(for exercise: Exercise, at index: Int, newReps: Int) {
-        guard let recordID = exercise.recordID else { return }
-        
-        // Check if the value has actually changed
-        if exercise.setActualReps[index] != newReps {
-            // Copy the current reps and update only the specified index
-            var updatedReps = exercise.setActualReps
-            updatedReps[index] = newReps
-            
-            // Call the CloudKit update method
-            evm.updateExercise(recordID: recordID, newActualReps: updatedReps)
+        // Add a stable identity to prevent focus issues
+        .id("ActualRepsField-\(exercise.id)-\(index)")
+        // Disable animations that could trigger view rebuilds
+        .transaction { transaction in
+            transaction.animation = nil
         }
     }
 }

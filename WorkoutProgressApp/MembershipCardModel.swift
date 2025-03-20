@@ -8,6 +8,9 @@
 import CloudKit
 import UIKit
 
+
+
+
 struct MembershipCard: Identifiable {
     var id: CKRecord.ID?
     var barcodeValue: String?
@@ -26,6 +29,21 @@ struct MembershipCard: Identifiable {
             self.barcodeImage = nil
         }
     }
+    
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+          // This prevents "Requesting visual style" warnings
+          if #available(iOS 15.0, *) {
+              UITabBar.appearance().scrollEdgeAppearance = UITabBarAppearance()
+              
+              // Also fix navigation bar appearance while we're at it
+              let navBarAppearance = UINavigationBarAppearance()
+              navBarAppearance.configureWithOpaqueBackground()
+              UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
+              UINavigationBar.appearance().standardAppearance = navBarAppearance
+          }
+          
+          return true
+      }
     
     // For creating a new instance.
     init(id: CKRecord.ID? = nil, barcodeValue: String?, barcodeImage: UIImage?) {

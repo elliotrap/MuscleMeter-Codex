@@ -19,6 +19,7 @@ struct WorkoutProgressApp: App {
     @StateObject var workoutViewModel = WorkoutViewModel()
     @State private var isLoading = true
     
+    
     var body: some Scene {
         WindowGroup {
             NavigationView {

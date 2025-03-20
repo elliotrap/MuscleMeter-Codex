@@ -94,3 +94,159 @@ class NumericFieldState: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: workItem)
     }
 }
+
+
+// A persistent state container for the weight field
+class WeightFieldState: ObservableObject {
+    @Published var text: String = ""
+    @Published var hasInitialized: Bool = false
+    var lastSubmittedValue: String = ""
+    private var updateWorkItem: DispatchWorkItem?
+    
+    // Schedule a debounced update
+    func scheduleUpdate(newValue: String, exercise: Exercise, index: Int, evm: ExerciseViewModel) {
+        // Cancel any pending update
+        updateWorkItem?.cancel()
+        
+        // Skip if no change from last submitted value
+        if newValue == lastSubmittedValue {
+            return
+        }
+        
+        // Create a new work item
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            
+            self.updateWeight(newValue: newValue, exercise: exercise, index: index, evm: evm)
+        }
+        
+        updateWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: workItem)
+    }
+    
+    // Submit the current value immediately
+    func submitImmediate(exercise: Exercise, index: Int, evm: ExerciseViewModel) {
+        // Cancel any pending update
+        updateWorkItem?.cancel()
+        updateWorkItem = nil
+        
+        // Skip if no change from last submitted value
+        if text == lastSubmittedValue {
+            return
+        }
+        
+        // Update now
+        updateWeight(newValue: text, exercise: exercise, index: index, evm: evm)
+    }
+    
+    // Update the weight value
+    private func updateWeight(newValue: String, exercise: Exercise, index: Int, evm: ExerciseViewModel) {
+        guard let recordID = exercise.recordID else { return }
+        
+        // Convert the value
+        let weightValue: Double
+        if newValue.isEmpty {
+            weightValue = 0
+        } else if let parsed = Double(newValue) {
+            weightValue = parsed
+        } else {
+            return // Invalid input
+        }
+        
+        // Track that we're submitting this value
+        lastSubmittedValue = newValue
+        
+        // Only update if the value actually changed
+        if index < exercise.setWeights.count && exercise.setWeights[index] != weightValue {
+            // Make a copy of the weights array
+            var newWeights = exercise.setWeights
+            newWeights[index] = weightValue
+            
+            // Use the silent update method to avoid UI refreshes
+            evm.updateExerciseWithoutRefresh(
+                recordID: recordID,
+                newWeights: newWeights
+            )
+        }
+    }
+}
+
+
+// State container for the actual reps field
+class ActualRepsFieldState: ObservableObject {
+    @Published var text: String = ""
+    @Published var hasInitialized: Bool = false
+    var lastSubmittedValue: String = ""
+    private var updateWorkItem: DispatchWorkItem?
+    
+    // Schedule a debounced update
+    func scheduleUpdate(newValue: String, exercise: Exercise, index: Int, evm: ExerciseViewModel) {
+        // Cancel any pending update
+        updateWorkItem?.cancel()
+        
+        // Skip if no change from last submitted value
+        if newValue == lastSubmittedValue {
+            return
+        }
+        
+        // Create a new work item
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            
+            self.updateActualReps(newValue: newValue, exercise: exercise, index: index, evm: evm)
+        }
+        
+        updateWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: workItem)
+    }
+    
+    // Submit the current value immediately and return whether field should remain visible
+    func submitImmediate(exercise: Exercise, index: Int, evm: ExerciseViewModel) -> Bool {
+        // Cancel any pending update
+        updateWorkItem?.cancel()
+        updateWorkItem = nil
+        
+        // Skip if no change from last submitted value
+        if text == lastSubmittedValue {
+            // Return whether the field should remain visible
+            return !text.isEmpty
+        }
+        
+        // Update now
+        updateActualReps(newValue: text, exercise: exercise, index: index, evm: evm)
+        
+        // Return whether the field should remain visible
+        return !text.isEmpty
+    }
+    
+    // Update the actual reps value
+    private func updateActualReps(newValue: String, exercise: Exercise, index: Int, evm: ExerciseViewModel) {
+        guard let recordID = exercise.recordID else { return }
+        
+        // Convert the value
+        let repsValue: Int
+        if newValue.isEmpty {
+            repsValue = 0
+        } else if let parsed = Int(newValue) {
+            repsValue = parsed
+        } else {
+            return // Invalid input
+        }
+        
+        // Track that we're submitting this value
+        lastSubmittedValue = newValue
+        
+        // Only update if the value actually changed
+        if index < exercise.setActualReps.count && exercise.setActualReps[index] != repsValue {
+            // Make a copy of the actual reps array
+            var updatedReps = exercise.setActualReps
+            updatedReps[index] = repsValue
+            
+            // Use the silent update method to avoid UI refreshes
+            evm.updateExerciseWithoutRefresh(
+                recordID: recordID,
+                newActualReps: updatedReps
+            )
+        }
+    }
+}

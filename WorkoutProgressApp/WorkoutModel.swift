@@ -33,23 +33,80 @@ class WorkoutViewModel: ObservableObject {
     // Use the private database (recommended so data isn’t public)
     @Published var database = CKContainer.default().privateCloudDatabase
     
+    // Add this property to your view model class
+    private var isFetchingWorkouts = false
+    private var currentWorkoutFetchID: String?
+
+    
+    
+    
+    // Enhanced fetchWorkouts method with better debugging and efficiency
     func fetchWorkouts() {
+        // Guard against duplicate fetches
+        guard !isFetchingWorkouts else {
+            print("🏋️‍♂️ Already fetching workouts, skipping duplicate request")
+            return
+        }
+        
+        // Set flag to prevent concurrent fetches
+        isFetchingWorkouts = true
+        
+        // Create a unique ID for this fetch operation
+        let fetchID = UUID().uuidString
+        currentWorkoutFetchID = fetchID
+        
+        print("💪 FETCH: Starting fetchWorkouts")
+        
         let query = CKQuery(recordType: "UserWorkout", predicate: NSPredicate(value: true))
         // Sort by sortIndex ascending
         query.sortDescriptors = [NSSortDescriptor(key: "sortIndex", ascending: true)]
+        
+        // Use a defer block to ensure we reset the flag, even in case of errors
+        defer {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.isFetchingWorkouts = false
+            }
+        }
 
-        database.perform(query, inZoneWith: nil) { records, error in
+        print("💪 FETCH: Querying CloudKit for workouts...")
+        database.perform(query, inZoneWith: nil) { [weak self] records, error in
+            guard let self = self else {
+                print("💪 FETCH: Self reference lost")
+                return
+            }
+            
+            // Verify this is still the current fetch operation
+            guard fetchID == self.currentWorkoutFetchID else {
+                print("💪 FETCH: Ignoring stale fetch result for operation \(fetchID)")
+                return
+            }
+            
             if let error = error {
-                print("Error fetching workouts:", error.localizedDescription)
+                print("❌ FETCH: Error fetching workouts: \(error.localizedDescription)")
+                
+                DispatchQueue.main.async {
+                    // Update any error state here if needed
+                    // self.error = error
+                    // self.objectWillChange.send()
+                }
                 return
             }
             
             if let records = records {
+                print("✅ FETCH: Successfully retrieved \(records.count) workouts from CloudKit")
+                
+                // Log some details about the workouts
+                for (index, record) in records.enumerated() {
+                    let name = record["name"] as? String ?? "Untitled"
+                    let sortIndex = record["sortIndex"] as? Int ?? 0
+                    print("📋 FETCH: Workout \(index): '\(name)' with sortIndex: \(sortIndex)")
+                }
+                
                 let fetchedWorkouts = records.map { record -> WorkoutModel in
                     let name = record["name"] as? String ?? "Untitled"
                     let sectionTitle = record["sectionTitle"] as? String
                     let date = record["date"] as? Date
-                    let sortIndex = record["sortIndex"] as? Int ?? 0  // default to 0 if missing
+                    let sortIndex = record["sortIndex"] as? Int ?? 0
                     
                     return WorkoutModel(
                         id: record.recordID,
@@ -59,8 +116,25 @@ class WorkoutViewModel: ObservableObject {
                         sortIndex: sortIndex
                     )
                 }
+                
+                print("📦 FETCH: Processed \(fetchedWorkouts.count) workout models")
+                
                 DispatchQueue.main.async {
+                    let oldCount = self.workouts.count
                     self.workouts = fetchedWorkouts
+                    print("🔄 FETCH: Updated workouts array from \(oldCount) to \(fetchedWorkouts.count) items")
+                    
+                    // If you're using a published property or ObservableObject, consider:
+                    // self.objectWillChange.send()
+                    
+                    print("✅ FETCH: Completed workout fetch successfully")
+                }
+            } else {
+                print("ℹ️ FETCH: No workout records found")
+                
+                DispatchQueue.main.async {
+                    self.workouts = []
+                    print("🔄 FETCH: Cleared workouts array")
                 }
             }
         }

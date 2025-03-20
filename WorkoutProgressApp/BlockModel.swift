@@ -13,10 +13,17 @@ import SwiftUI
 struct WorkoutBlock: Identifiable {
     var blockID: CKRecord.ID?
     var title: String
-    var order: Int // New property to track block order
+    var order: Int // Property to track block order
     
-    // Conform to Identifiable by defining `var id: CKRecord.ID?`
-    var id: CKRecord.ID? { blockID }
+    // Conform to Identifiable with a String ID that is guaranteed to be unique
+    var id: String {
+        if let blockID = blockID {
+            return blockID.recordName
+        } else {
+            // Generate a unique ID using title, order and UUID
+            return "\(title)-\(order)-\(UUID().uuidString)"
+        }
+    }
     
     init(record: CKRecord) {
         self.blockID = record.recordID
@@ -41,6 +48,7 @@ struct WorkoutBlock: Identifiable {
         return record
     }
 }
+
 
 
 
@@ -159,24 +167,33 @@ class WorkoutBlockManager: ObservableObject {
         }
     }
     
+    // Delete a block
     func deleteBlock(block: WorkoutBlock) {
-        guard let recordID = block.id else { return }
+        // Use blockID (the CKRecord.ID) instead of id (the String)
+        guard let recordID = block.blockID else {
+            print("Error: Cannot delete block without a record ID")
+            return
+        }
+        
         privateDB.delete(withRecordID: recordID) { deletedRecordID, error in
             if let error = error {
                 print("Error deleting block: \(error.localizedDescription)")
                 return
             }
+            
             // Make sure this is on the main thread
             DispatchQueue.main.async {
-                self.blocks.removeAll { $0.id == recordID }
+                // When comparing, use the string id property that's guaranteed to exist
+                self.blocks.removeAll { $0.id == block.id }
                 print("Successfully deleted block with record ID: \(recordID.recordName)")
             }
         }
     }
-    
-    // Update an existing block.
+
+    // Update an existing block
     func updateBlock(block: WorkoutBlock, newTitle: String) {
-        guard let recordID = block.id else {
+        // Use blockID (the CKRecord.ID) instead of id (the String)
+        guard let recordID = block.blockID else {
             print("Error: Block has no record ID.")
             return
         }
@@ -198,6 +215,7 @@ class WorkoutBlockManager: ObservableObject {
                     if let updatedRecord = updatedRecord {
                         let updatedBlock = WorkoutBlock(record: updatedRecord)
                         DispatchQueue.main.async {
+                            // When comparing blocks, use the string id property
                             if let index = self.blocks.firstIndex(where: { $0.id == block.id }) {
                                 self.blocks[index] = updatedBlock
                             }
@@ -212,7 +230,6 @@ class WorkoutBlockManager: ObservableObject {
             }
         }
     }
-    
     
     
     // MARK: - Update Workout Block Association
