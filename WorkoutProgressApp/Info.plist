@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict/>
+    </array>
+    <!-- Updated version number -->
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.1</string>
+    <!-- Updated build number -->
+    <key>CFBundleVersion</key>
+    <string>2</string>
+    <!-- Privacy - Camera Usage Description -->
+    <key>NSCameraUsageDescription</key>
+    <string>This app requires access to the camera to scan your membership card barcode.</string>
+</dict>
+</plist>
