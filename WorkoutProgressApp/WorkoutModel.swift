@@ -184,6 +184,11 @@ class WorkoutViewModel: ObservableObject {
                         if let section = newSectionTitle {
                             self.workouts[i].sectionTitle = section
                         }
+                        if let i = self.workouts.firstIndex(where: { $0.id == workout.id }) {
+                            if let title = newName {
+                                self.workouts[i].name = title
+                            }
+                        }
                         if let idx = newSortIndex {
                             self.workouts[i].sortIndex = idx
                         }
@@ -196,11 +201,7 @@ class WorkoutViewModel: ObservableObject {
     }
 
 
-    // 3. Keep your existing updateWorkout method to maintain backward compatibility
-    func updateWorkout(workout: WorkoutModel, newName: String, completion: @escaping (Bool) -> Void) {
-        // Call the enhanced version with just the name parameter
-        updateWorkout(workout: workout, newName: newName, newColorHex: nil, completion: completion)
-    }
+
 
     // 4. Add a new method for updating just the color
     func updateWorkoutColor(workout: WorkoutModel, newColor: String, completion: @escaping (Bool) -> Void) {

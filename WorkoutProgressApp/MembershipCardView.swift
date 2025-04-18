@@ -16,6 +16,8 @@ struct MembershipCardScannerView: View {
     @State private var pendingBarcodeValue: String?
     @State private var showDetailsEntry = false
     @State private var detailsEntryBarcode: BarcodeWrapper?
+    @State private var isLoading: Bool = true
+    
     @Environment(\.presentationMode) private var presentationMode
 
     var body: some View {
@@ -38,7 +40,14 @@ struct MembershipCardScannerView: View {
                     membershipLevel: "Standerd"
                 )
                 
-                if let _ = membershipCard {
+                if isLoading {
+                    VStack {
+                        Spacer()
+                        ProgressView("Loading Membership Card…")
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        Spacer()
+                    }
+                } else if let _ = membershipCard {
                     EditableMembershipCardView(
                         card: Binding(
                             get: { membershipCard ?? dummyMembershipCard }, // Provide a safe fallback
@@ -85,11 +94,13 @@ struct MembershipCardScannerView: View {
             // Barcode scanning & details entry flow unchanged
             .onAppear {
                 print("👀 Attempting to fetch card…")
+                isLoading = true
                 MembershipCard.fetchMembershipCard { card in
                     if let card = card {
                         print("✅ Loaded card with ID: \(card.id?.recordName ?? "nil")")
                     }
                     membershipCard = card
+                    isLoading = false
                 }
             }
         }

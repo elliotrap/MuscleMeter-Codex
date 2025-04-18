@@ -387,7 +387,7 @@ struct CustomRoundedRectangle4: Shape {
 struct ExerciseCustomRoundedRectangle: View {
     var progress: CGFloat = 0.5
     var accentColor: Color = .blue
-    var cornerRadius: CGFloat = 10
+    var cornerRadius: CGFloat = 15
     var width: CGFloat = 340
     var height: CGFloat = 140
     
@@ -410,10 +410,10 @@ struct ExerciseCustomRoundedRectangle: View {
             }
             ZStack {
                 // Outline stroke
-                RoundedRectangle(cornerRadius: cornerRadius + 9)
+                RoundedRectangle(cornerRadius: cornerRadius + 5 )
                     .stroke(lineWidth: 5)
                     .foregroundColor(Color("NeomorphBG4").opacity(0.7))
-                    .frame(width: width + 15, height: height + 15)
+                    .frame(width: width + 20, height: height + 20)
                 
          
                 
@@ -423,16 +423,15 @@ struct ExerciseCustomRoundedRectangle: View {
                         LinearGradient(
                             gradient: Gradient(stops: [
                                 // First stop - start with the lowest location value
-                                .init(color: accentColor, location: 0.0),
+                                .init(color: accentColor, location: 0.04),
                                 
                                 // Second stop - ensures proper ordering with first stop
-                                .init(color: accentColor.opacity(0.3), location: 0.03),
+                                .init(color: accentColor.opacity(0.04), location: 0.001),
                                 
-                                // Third stop - make sure it's always greater than second stop
+                                // Third stop: Transitioning to the background color
                                 .init(color: Color("NeomorphBG3").opacity(0.6), location: max(0.04, progress)),
-                                
-                                // Final stop - always at the end
-                                .init(color: Color("NeomorphBG3").opacity(0.2), location: 1.0)
+                                // Fourth stop: The background tint at the end
+                                .init(color: Color("NeomorphBG3").opacity(0.3), location: 1.0)
                             ]),
                             startPoint: .leading,
                             endPoint: .trailing
@@ -521,7 +520,7 @@ struct BlockCustomRoundedRectangle: View {
     /// The user-selected color for accenting this rectangle.
     var accentColor: Color = .blue // you can change the accent color using this variable
     
-    var cornerRadius: CGFloat = 30
+    var cornerRadius: CGFloat = 20
     var width: CGFloat = 266
     var height: CGFloat = 266
     
@@ -551,35 +550,32 @@ struct BlockCustomRoundedRectangle: View {
                 .frame(width: width + 20, height: height + 20)
             
             // Glow behind the rectangle (optional)
-            VStack {
-                Spacer().frame(height: 250)
-
                 RoundedRectangle(cornerRadius: 50)
                     .fill(
                         AnyShapeStyle(accentColor.opacity(0.65))
                     )
                     .frame(width: width + 70, height: 35)
                     .blur(radius: 30)
-            }
+                    .offset(y: 128)  // Nudges shadow up if needed
+
             
-            // Main accent rectangle
+
+            // Main card
             RoundedRectangle(cornerRadius: cornerRadius)
                 .fill(
                     LinearGradient(
                         gradient: Gradient(stops: [
-                            // 0..progress: accent color
-                            .init(color: accentColor,              location: 0.00),
+                            .init(color: accentColor, location: 0.00),
                             .init(color: accentColor.opacity(0.3), location: progress),
-                            
-                            // progress..1: "NeomorphBG3" to lighten the top portion
-                            .init(color: Color("NeomorphBG3").opacity(0.6), location: progress),
-                            .init(color: Color("NeomorphBG3").opacity(0.3), location: 1.0)
+                            .init(color: Color("NeomorphBG3"), location: progress),
+                            .init(color: Color("NeomorphBG2"), location: 1.0)
                         ]),
                         startPoint: .bottom,
                         endPoint: .top
                     )
                 )
                 .frame(width: width, height: height)
+            
         }
     }
 }
@@ -754,20 +750,17 @@ struct ActualRepsField: View {
         @FocusState private var isFocused: Bool
         
         var body: some View {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Sets:")
+            VStack(alignment: .center, spacing: 4) {
+                VStack {
+                    Text("Sets")
                         .foregroundColor(.white.opacity(0.8))
                     TextField("Sets", text: $fieldState.text)
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.center)
-                        .padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: 5)
-                                .fill(Color.black.opacity(0.2))
-                        )
-                        .foregroundColor(.white.opacity(0.8))
-                        .frame(width: 60)
+                        .padding()
+                        .background(Color.black.opacity(0.3))
+                        .cornerRadius(15)
+                        .frame(width: 50, height: 40)
                         .focused($isFocused)
                         .onChange(of: fieldState.text) { newValue in
                             if isInitialized {
@@ -791,12 +784,7 @@ struct ActualRepsField: View {
                             }
                         }
                 }
-                .background(
-                    // Simplified background to avoid gradient issues
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color("NeomorphBG2").opacity(0.6))
-                        .frame(width: 156, height: 60)
-                )
+    
                 
                 // Display error message if one exists
                 if let errorMessage = fieldState.errorMessage {
@@ -844,20 +832,17 @@ struct ActualRepsField: View {
         @FocusState private var isFocused: Bool
         
         var body: some View {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Reps:")
+            VStack(alignment: .center, spacing: 4) {
+                VStack {
+                    Text("Reps")
                         .foregroundColor(.white.opacity(0.8))
                     TextField("Reps", text: $fieldState.text)
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.center)
-                        .padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: 5)
-                                .fill(Color.black.opacity(0.2))
-                        )
-                        .foregroundColor(.white.opacity(0.8))
-                        .frame(width: 60)
+                        .padding()
+                        .background(Color.black.opacity(0.3))
+                        .cornerRadius(15)
+                        .frame(width: 50, height: 40)
                         .focused($isFocused)
                         .onChange(of: fieldState.text) { newValue in
                             if isInitialized {
@@ -881,12 +866,7 @@ struct ActualRepsField: View {
                             }
                         }
                 }
-                .background(
-                    // Simplified background to avoid gradient issues
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color("NeomorphBG2").opacity(0.6))
-                        .frame(width: 156, height: 60)
-                )
+       
                 
                 // Display error message if one exists
                 if let errorMessage = fieldState.errorMessage {
@@ -990,19 +970,16 @@ struct ExerciseNameField: View {
     @State private var isInitialized = false
     
     var body: some View {
-        HStack {
-            Text("Name:")
+        VStack {
+            Text("Exercise Name")
                 .foregroundColor(.white.opacity(0.8))
             
             TextField("Exercise Name", text: $textState.text)
                 .multilineTextAlignment(.center)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(Color.black.opacity(0.2))
-                )
-                .foregroundColor(.white.opacity(0.8))
-                .frame(width: 200)
+                .padding()
+                .background(Color.black.opacity(0.3))
+                .cornerRadius(15)
+                .frame(width: 200, height: 40)
                 // Key improvement: Disable autocorrection that can cause focus issues
                 .autocorrectionDisabled(true)
                 .textInputAutocapitalization(.never)
@@ -1014,11 +991,7 @@ struct ExerciseNameField: View {
                     }
                 }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color("NeomorphBG2").opacity(0.6))
-                .frame(width: 286, height: 60)
-        )
+ 
         .onAppear {
             // Only initialize once
             if !isInitialized {
@@ -1148,7 +1121,146 @@ struct ColorPickerSheet: View {
     }
 }
 
+struct NeumorphicButtonStyle: ButtonStyle {
+    var accent: Color = Color("NeomorphBG3")
+    var highlight: Color = Color.white.opacity(0.22)
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                ZStack {
+                    // Soft background glow
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(accent)
+                        .shadow(color: Color.black.opacity(0.46), radius: 8, x: 8, y: 8)
+                        .shadow(color: Color("NeomorphBG8").opacity(0.15), radius: 8, x: -8, y: -8)
+                    
+                    // “Glassy” highlight
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(highlight, lineWidth: 1.2)
+                        .blur(radius: 1.2)
+                        .offset(y: -3)
+                        .opacity(configuration.isPressed ? 0.07 : 0.13)
+                    
+                    // “Pressed” overlay
+                    if configuration.isPressed {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Color.white.opacity(0.04))
+                    }
+                }
+            )
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.easeInOut(duration: 0.13), value: configuration.isPressed)
+    }
+}
+
+struct NeumorphicButtonStyle2: ButtonStyle {
+    var accent: Color = Color("NeomorphBG3")
+    var highlight: Color = Color.white.opacity(0.12)
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                ZStack {
+                    // Soft background glow
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(accent)
+                        .shadow(color: Color.black.opacity(0.36), radius: 6, x: 4, y: 4)
+                        .shadow(color: Color("NeomorphBG7").opacity(0.10), radius: 6, x: -4, y: -4)
+                    
+                    // “Glassy” highlight
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(highlight, lineWidth: 1.2)
+                        .blur(radius: 1.2)
+                        .offset(y: -2)
+                        .opacity(configuration.isPressed ? 0.07 : 0.13)
+                    
+                    // “Pressed” overlay
+                    if configuration.isPressed {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Color.white.opacity(0.04))
+                    }
+                }
+            )
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.easeInOut(duration: 0.13), value: configuration.isPressed)
+    }
+}
+
+
+struct DreamyGlowBackground: View {
+    /// A dreamy palette of subtle, pastel‑leaning hues
+    private let dreamyColors: [Color] = [
+        Color(red: 0.50, green: 0.20, blue: 0.70),
+        Color(red: 0.30, green: 0.50, blue: 0.90),
+        Color(red: 0.80, green: 0.40, blue: 0.60),
+        Color(red: 0.60, green: 0.80, blue: 0.70)
+    ]
+    @State private var currentIndex = 0
+    private let timer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        // Compute next color to transition to
+        let nextIndex = (currentIndex + 1) % dreamyColors.count
+        let gradient = LinearGradient(
+            gradient: Gradient(colors: [dreamyColors[currentIndex], dreamyColors[nextIndex]]),
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        
+        gradient
+            .animation(.easeInOut(duration: 4), value: currentIndex)
+            .blur(radius: 60)               // big blur for that ethereal glow
+            .ignoresSafeArea()              // fill entire background
+            .onReceive(timer) { _ in
+                // step through the palette
+                currentIndex = nextIndex
+            }
+    }
+}
+
+#if DEBUG
+
 
 #Preview {
-    ExerciseCustomRoundedRectangle()
+    ZStack {
+        LinearGradient(
+            gradient: Gradient(colors: [Color("NeomorphBG2"), Color("NeomorphBG2")]),
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+        VStack(spacing: 20) {
+            Button(action: {}) {
+                Text("Workouts List")
+                    .font(.system(size: 18, weight: .semibold, design: .default))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                 
+            }
+            .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
+            .padding(.horizontal, 18)
+            .buttonStyle(NeumorphicButtonStyle())
+//            
+            BlockCustomRoundedRectangle()
+                .frame(width: 266, height: 266)
+                .padding()
+            
+          
+            
+            DreamyGlowBackground()
+                .frame(width: 266, height: 66)
+
+        }
+    }
 }
+#endif
+
+
+
+
+
+
+
+
+

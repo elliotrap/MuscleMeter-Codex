@@ -41,7 +41,7 @@ struct AllWorkoutsListView: View {
             .ignoresSafeArea()
             
             ScrollView {
-                LazyVStack(spacing: 56) {
+                LazyVStack(spacing: 0) {
                     // Iterate over each group
                     ForEach(sortedGroups, id: \.key) { group in
                         Section(header:
@@ -353,6 +353,32 @@ struct BlockWorkoutsListView: View {
                 .padding(.horizontal, 4)
                 .padding(.vertical, 4)
                 
+                if let movingWorkout = selectedToMove,
+                   workout.id == movingWorkout.id {
+                    Button(action: {
+                        // cancel the move
+                        selectedToMove = nil
+                        refreshID = UUID()
+                    }) {
+                        
+                        HStack(alignment: .center, spacing: 10) {
+                    
+                            Label("Cancel Move", systemImage: "xmark.circle.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.red)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.vertical, 14)
+                        .padding(.horizontal, 26) // <<-- more space on sides
+                        .frame(maxWidth: 330, minHeight: 54)
+            
+                    }
+                    .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 8)
+                }
+                
                 // If we're moving a workout, show insertion points between workouts
                 if let movingWorkout = selectedToMove,
                    movingWorkout.id != workout.id,
@@ -417,16 +443,21 @@ struct BlockWorkoutsListView: View {
                 refreshID = UUID()
             }
         }) {
-            HStack {
+            
+            HStack(alignment: .center, spacing: 10) {
                 Image(systemName: systemImage)
-                    .font(.title3)
+                    .font(.title)
                 Text(label)
-                    .fontWeight(.medium)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .foregroundColor(.blue)
-            .padding(.vertical, 8)
+            .padding(.vertical, 14)
+            .padding(.horizontal, 26) // <<-- more space on sides
+            .frame(maxWidth: 330, minHeight: 54)
         }
-        .buttonStyle(BorderedButtonStyle())
+        .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
         .id("insertion-\(targetIndex)-\(refreshID)")
         .padding(.horizontal, 16)
     }
@@ -463,15 +494,20 @@ struct BlockWorkoutsListView: View {
                 selectedToMove = nil
                 refreshID = UUID()
             }) {
-                HStack {
+                HStack(alignment: .center, spacing: 10) {
                     Image(systemName: systemImage)
                         .font(.title)
                     Text(buttonText)
-                        .fontWeight(.medium)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .foregroundColor(.blue)
-                .padding(.vertical, 8)
+                .padding(.vertical, 14)
+                .padding(.horizontal, 26) // <<-- more space on sides
+                .frame(maxWidth: 330, minHeight: 54)
             }
+            .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
             .id("insertion-\(position)-\(targetIndex)-\(refreshID)")
             .padding(.horizontal, 16)
         )
@@ -619,7 +655,7 @@ struct WorkoutCardView: View {
                     accentColor: currentAccentColor,
                     cornerRadius: 15,
                     width: 336,
-                    height: isEditing ? 250 : 120
+                    height: isEditing ? 300 : 120
                 )
                 
                 HStack(spacing: 60) {
@@ -659,40 +695,18 @@ struct WorkoutCardView: View {
                 }
                 
                 VStack(spacing: 16) {
-                    HStack {
+                    VStack(alignment: .center, spacing: 10) {
+                        Text("Workout Name")
+                            .font(.headline)
+                            .padding(.leading, 5)
+                        
                         TextField("Workout Name", text: $editedWorkoutName)
-                            .padding(.vertical, 4)
-                            .background(
-                                RoundedRectangle(cornerRadius: 5)
-                                    .fill(Color(.black).opacity(0.2))
-                            )
-                            .foregroundColor(.white).opacity(0.8)
-                            .frame(width: 190)
-                            .frame(width: 60)
+                            .multilineTextAlignment(.center)
+                            .padding()
+                            .background(Color.black.opacity(0.3))
+                            .cornerRadius(8)
+                            .frame(width: 200, height: 40)
                     }
-                    .background(
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(lineWidth: 5)
-                                .foregroundColor(Color("NeomorphBG4").opacity(0.7))
-                                .frame(width: 256, height: 60)
-                            
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 9)
-                                    .fill(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [
-                                                Color("NeomorphBG2").opacity(0.6),
-                                                Color("NeomorphBG2").opacity(0.6)
-                                            ]),
-                                            startPoint: .bottom,
-                                            endPoint: .topTrailing
-                                        )
-                                    )
-                                    .frame(width: 243, height: 46)
-                            }
-                        }
-                    )
                     
                     // Example: a new "Move" button
    
@@ -777,7 +791,7 @@ struct WorkoutCardView: View {
                     .buttonStyle(.borderless)
                     .offset(x: 0, y: 5)
                 }
-                .offset(x: 0, y: 15)
+                .offset(x: 0, y: -10)
 
             }
             .frame(width: 336, height: isEditing ? 200 : 120)

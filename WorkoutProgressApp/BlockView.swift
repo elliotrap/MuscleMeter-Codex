@@ -247,43 +247,92 @@ struct BlockCardView: View {
             if isEditing {
                      // In editing mode, the entire card displays buttons
                 BlockCustomRoundedRectangle(accentColor: displayColor)
-                         .overlay(
-                             VStack(spacing: 16) {
-                                 Button(action: {
-                                     withAnimation {
-                                         blockManager.deleteBlock(block: block)
-                                         isEditing = false
-                                     }
-                                 }) {
-                                     Text("Delete Block")
-                                         .font(.headline)
-                                         .foregroundColor(.white)
-                                         .padding()
-                                 }
-                                 
-                                 Button(action: {
-                                     showReorderSheet = true
-                                     isEditing = false // Close editing mode when moving
-                                 }) {
-                                     Text("Reorder Blocks")
-                                         .font(.headline)
-                                         .foregroundColor(.white)
-                                         .padding()
-                                 }
-                                 
-                                 Button(action: {
-                          
-                                     selectedColor = displayBlock.accentColor           // ✅ no hex‑to‑Color needed
-                                     showColorPicker = true
-                                   }) {
-                                       Label("Change Color", systemImage: "paintpalette")
-                                           .padding()
-                                           .background(Color.white.opacity(0.2))
-                                           .cornerRadius(10)
-                                   }
-                                 
-                             }
-                         )
+                    .overlay(
+                        VStack {
+                            // HStack for edit/delete in the top right
+                            HStack(spacing: 55) {
+                                
+                                Button(action: {
+                                    withAnimation {
+                                        isEditing.toggle()
+                                    }
+                                }) {
+                                    Image(systemName: "arrow.left")
+                                        .font(.system(size: 24, weight: .bold))
+                                        .frame(width: 44, height: 44)
+                                        .background(Color.black.opacity(0.22))
+                                        .foregroundColor(.white)
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle().stroke(Color.white.opacity(0.2), lineWidth: 1.2)
+                                        )
+                                    
+                                }
+                                .buttonStyle(.borderless)
+                                
+                                
+
+
+                                // Color Picker/Edit Button
+                                Button(action: {
+                                    selectedColor = displayBlock.accentColor
+                                    showColorPicker = true
+                                }) {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 24, weight: .bold))
+                                        .frame(width: 44, height: 44)
+                                        .background(Color.black.opacity(0.22))
+                                        .foregroundColor(.white)
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle().stroke(Color.white.opacity(0.2), lineWidth: 1.2)
+                                        )
+                                }
+                                .buttonStyle(.borderless)
+                                
+
+                                // Delete Button
+                                Button(action: {
+                                    blockManager.deleteBlock(block: block)
+                                    isEditing = false
+                                }) {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 24, weight: .bold))
+                                        .frame(width: 44, height: 44)
+                                        .background(Color.black.opacity(0.22))
+                                        .foregroundColor(.red)
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.red.opacity(0.25), lineWidth: 2)
+                                        )
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                            .padding([.top, .horizontal], 0)
+
+                            Spacer()
+                                .frame(height: 130)
+
+                            // Reorder Blocks Button (at bottom or center, more visible)
+                            Button(action: {
+                                showReorderSheet = true
+                                isEditing = false
+                            }) {
+                                Text("Reorder Blocks")
+                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 11)
+                                    .frame(maxWidth: 180)
+                            }
+                            .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
+                            .padding(.bottom, 28)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black.opacity(0.001)) // touchable overlay, nearly invisible
+                        , alignment: .top // Ensures the HStack is at the card's top!
+                    )
                  } else {
                 
                      NavigationLink(
@@ -294,44 +343,39 @@ struct BlockCardView: View {
                      ) {
                          BlockCustomRoundedRectangle(accentColor: displayColor)
                              .overlay(
-                                 Text(block.title)
-                                     .font(.system(size: 28, weight: .medium))
-                                     .foregroundColor(.white)
-                                     .frame(width: 196)
-                                     .lineLimit(3)
-                                     .multilineTextAlignment(.center)
-                                     .shadow(color: .black.opacity(0.16), radius: 4, x: 0, y: 1)
+                                ZStack(alignment: .topTrailing) {
+                                    // Title centered in card
+                                    Text(block.title)
+                                        .font(.system(size: 28, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .frame(width: 196)
+                                        .lineLimit(3)
+                                        .multilineTextAlignment(.center)
+                                        .shadow(color: .black.opacity(0.16), radius: 4, x: 0, y: 1)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    
+                                    // Top-right corner action button
+                                    Button(action: {
+                                        withAnimation { isEditing.toggle() }
+                                    }) {
+                                        Image(systemName: "gear")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .frame(width: 34, height: 34)
+                                            .background(Color.black.opacity(0.22))
+                                            .foregroundColor(.white).opacity(0.8)
+                                            .clipShape(Circle())
+                                     
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .padding(.top, 20)
+                                    .padding(.trailing, 50)
+
+                                }
                              )
                              .padding(.vertical, 8)
                              .padding(.horizontal, 2)
                      }
                      .buttonStyle(.plain)
-            }
-            
-            // Gear icon in the top-right corner
-            VStack {
-    
-
-                HStack {
-                    Spacer()
-                        .frame(width: 200)
-                    Button(action: {
-                        withAnimation {
-                            isEditing.toggle()
-                        }
-                    }) {
-                        Image(systemName: isEditing ? "x.circle" : "gearshape")
-                            .resizable()
-                            .frame(width: 20, height: 20)
-                            .opacity(0.7)
-                            .foregroundColor(.white)
-                            .padding(10)
-                        
-                    }
-                    .buttonStyle(.borderless)
-                }
-                Spacer()
-                    .frame(height: 200)
             }
         }
         .rotation3DEffect(

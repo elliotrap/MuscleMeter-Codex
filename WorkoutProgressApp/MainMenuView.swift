@@ -20,6 +20,7 @@ struct MainMenuView: View {
 
     var body: some View {
         ZStack {
+            
             // 1. True BG at Root
             LinearGradient(
                 gradient: Gradient(colors: [Color("NeomorphBG2"), Color("NeomorphBG2")]),
@@ -34,97 +35,116 @@ struct MainMenuView: View {
                         .foregroundColor(.white)
                         .padding(.leading, 20)
                         .padding(.top, 50)
+                    
                     Spacer()
+                        .frame(width: 190)
+                    
                     NavigationLink(destination: MembershipCardScannerView()
                         .navigationBarBackButtonHidden(true)
                         .trackNavigation("Membership Card Scanner View")
                     ) {
                         Image(systemName: "creditcard")
+                            .resizable()
+                            .frame(width: 30, height: 25)
                             .font(.title2)
                             .foregroundColor(Color.blue)
-                            .padding(.trailing, 18)
                             .padding(.top, 50)
-
+                        
                     }
                     .buttonStyle(.plain)
+                    
+                    
+                    Spacer()
+                    
+                    
                 }
                 .frame(height: 156) // Responsive height—tune as needed
                 .background(
-                    Color("NeomorphBG5")
-                        .opacity(0.6)
-                        .blur(radius: 0.5)
-                        .shadow(color: .black.opacity(0.33), radius: 10, x: 0, y: 8)
+                    
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color("NeomorphBG3"), Color("NeomorphBG2")]),
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .ignoresSafeArea()
+                    
+                    
+                    
+                )
+                .background(
+                    Color("NeomorphBG4")
+                        .opacity(0.7)
+                        .blur(radius: 1)
+                        .frame(width: 500)
+                        .shadow(color: .black.opacity(0.7), radius: 20, x: 0, y: 8)
                 )
                 .overlay(
                     Rectangle()
-                        .fill(Color.black.opacity(0.30))
-                        .frame(height: 2),
+                        .fill(Color.black.opacity(0.20))
+                        .frame(height: 1),
                     alignment: .bottom
                 )
                 // Padding so content never is squeezed at the top
                 .padding(.top, UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0)
-
-                // 3. Main Content Below AppBar
-                VStack(spacing: 16) {
-                    BlocksTabView()
-                    // --- your beautiful nav buttons as before ---
-                    NavigationLink(destination:
-                        AllWorkoutsListView()
+                
+                ZStack {
+                    // 3. Main Content Below AppBar
+                    VStack(spacing: 26) {
+                        BlocksTabView()
+                        // --- your beautiful nav buttons as before ---
+                        NavigationLink(destination:
+                                        AllWorkoutsListView()
                             .navigationBarBackButtonHidden(true)
                             .trackNavigation("All Workouts List View")
-                    ) {
-                        Text("Workouts List")
-                            .font(.system(size: 18, weight: .semibold, design: .default))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity, minHeight: 54)
-                            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    }
-                    .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
-                    .padding(.horizontal, 18)
+                        ) {
+                            Text("Workouts List")
+                                .font(.system(size: 18, weight: .semibold, design: .default))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity, minHeight: 54)
+                                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        }
+                        .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
+                        .padding(.horizontal, 18)
+                        
+                        let defaultBlock = WorkoutBlock(
+                            title: "Default Block"
+                        )
+                        
+                        NavigationLink(destination: MainAppView(blockManager: blockManager, isAuthenticated: $isAuthenticated, block: defaultBlock)
+                            .navigationBarBackButtonHidden(true)
+                            .trackNavigation("Main App View")
+                        ) {
+                            Text("Rank Your Weight Class")
+                                .font(.system(size: 18, weight: .semibold, design: .default))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity, minHeight: 54)
+                                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        }
+                        .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
+                        .padding(.horizontal, 18)
+                        
+                        NavigationLink(destination: NewOneRepMaxCalculatorView()) {
+                            Text("One Rep Max Calculator")
+                                .font(.system(size: 18, weight: .semibold, design: .default))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity, minHeight: 54)
+                                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        }
+                        .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
+                        .padding(.horizontal, 18)            }
+                    .padding(.top, 10) // Give it a nudge down to accommodate nav bar height
                     
-                    let defaultBlock = WorkoutBlock(
-                         title: "Default Block"
-                     )
                     
-                    NavigationLink(destination: MainAppView(blockManager: blockManager, isAuthenticated: $isAuthenticated, block: defaultBlock)
-                        .navigationBarBackButtonHidden(true)
-                        .trackNavigation("Main App View")
-                    ) {
-                        Text("Rank Your Weight Class")
-                            .font(.system(size: 18, weight: .semibold, design: .default))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity, minHeight: 54)
-                            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    }
-                    .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
-                    .padding(.horizontal, 18)
-                    
-                    NavigationLink(destination: NewOneRepMaxCalculatorView()) {
-                        Text("One Rep Max Calculator")
-                            .font(.system(size: 18, weight: .semibold, design: .default))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity, minHeight: 54)
-                            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    }
-                    .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
-                    .padding(.horizontal, 18)            }
-                .padding(.top, 10) // Give it a nudge down to accommodate nav bar height
                 }
                 .padding(.bottom, 190)
                 
                 Spacer(minLength: 0)
+                
+                
+            }
             
         }
-    
         .navigationBarHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                NavigationLink(destination: MembershipCardScannerView() /* ... */) {
-                    Image(systemName: "creditcard")
-                        .font(.title2)
-                }
-            }
-        }
+
         .background(
             LinearGradient(
                 gradient: Gradient(colors: [Color("NeomorphBG2"), Color("NeomorphBG2")]),
@@ -136,37 +156,7 @@ struct MainMenuView: View {
 }
 
 
-struct NeumorphicButtonStyle: ButtonStyle {
-    var accent: Color = Color("NeomorphBG3")
-    var highlight: Color = Color.white.opacity(0.12)
-    
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(
-                ZStack {
-                    // Soft background glow
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(accent)
-                        .shadow(color: Color.black.opacity(0.16), radius: 6, x: 0, y: 4)
-                    
-                    // “Glassy” highlight
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(highlight, lineWidth: 1.2)
-                        .blur(radius: 1.2)
-                        .offset(y: -2)
-                        .opacity(configuration.isPressed ? 0.07 : 0.13)
-                    
-                    // “Pressed” overlay
-                    if configuration.isPressed {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Color.white.opacity(0.04))
-                    }
-                }
-            )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.easeInOut(duration: 0.13), value: configuration.isPressed)
-    }
-}
+
 struct NewOneRepMaxCalculatorView: View {
     @State private var weight: String = ""
     @State private var reps: String = ""

@@ -52,6 +52,7 @@ struct ExercisesView: View {
             )
             .ignoresSafeArea()
             
+            
             mainContent
                 .navigationTitle("Your Exercises")
                 .toolbar {
@@ -95,7 +96,7 @@ struct ExercisesView: View {
 //                            accentColorHex: "#0000FF",
 //                            sortIndex: 1
 //                        )
-//                        
+//
 //                        viewModel.exercises = [dummy1, dummy2]
 //                    }
                 }
@@ -303,15 +304,21 @@ struct ExercisesView: View {
                                 selectedToMove = nil
                                 viewModel.refreshID = UUID()
                             }) {
-                                HStack {
+                                
+                                HStack(alignment: .center, spacing: 10) {
                                     Image(systemName: "xmark.circle")
                                         .foregroundColor(.red)
                                     Text("Cancel Moving \(exercise.name)")
+                                        .font(.system(size: 18, weight: .semibold))
                                         .foregroundColor(.red)
-                                        .fontWeight(.medium)
+                                        .multilineTextAlignment(.center)
+                                        .fixedSize(horizontal: false, vertical: true)
                                 }
-                                .padding(.vertical, 8)
+                                .padding(.vertical, 14)
+                                .padding(.horizontal, 26) // <<-- more space on sides
+                                .frame(maxWidth: 330, minHeight: 54)
                             }
+                            .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
                             .padding(.horizontal, 16)
                             .padding(.bottom, 8)
                         }
@@ -409,14 +416,25 @@ struct ExercisesView: View {
                 }
             }) {
                 HStack {
-                    Image(systemName: systemImage)
-                        .font(.title)
-                    Text(buttonText)
-                        .fontWeight(.medium)
+                    
+                    HStack(alignment: .center, spacing: 10) {
+                        Image(systemName: systemImage)
+                            .font(.title)
+                        Text(buttonText)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.vertical, 14)
+                    .padding(.horizontal, 26) // <<-- more space on sides
+                    .frame(maxWidth: 330, minHeight: 54)
+        
                 }
-                .foregroundColor(.blue)
+                .foregroundColor(.white)
                 .padding(.vertical, 8)
             }
+                .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
                 .id("exercise-insertion-\(position)-\(targetIndex)-\(viewModel.refreshID)")
                 .padding(.horizontal, 16)
         )
@@ -685,6 +703,7 @@ struct AddExerciseView: View {
         )
     }
 }
+// MARK: - ExerciseCardView
 
 struct ExerciseCardView: View {
     // The entire exercise model
@@ -692,7 +711,6 @@ struct ExerciseCardView: View {
     
     @ObservedObject var evm: ExerciseViewModel
     
-    // MARK: - Incoming Data
     var recordID: CKRecord.ID?
     
     // For controlling plus-icon vs. text field on a per-index basis
@@ -795,7 +813,7 @@ struct ExerciseCardView: View {
             )
             
             // Main content
-            VStack(alignment: .center, spacing: 46) {
+            VStack(alignment: .center, spacing: 16) {
                 EditModeHeader()
                 EditModeContent()
             }
@@ -809,32 +827,30 @@ struct ExerciseCardView: View {
                 showColorPicker = true
             } label: {
                 Image(systemName: "pencil")
-                    .foregroundColor(.black)
+                    .font(.system(size: 25))
+
+                    .foregroundColor(.white).opacity(0.7)
                     .padding(8)
-                    .background(Color.white.opacity(0.3))
+                    .background(Color.black.opacity(0.3))
                     .clipShape(Circle())
             }
             .buttonStyle(.borderless)
-            .background(
-                Color("NeomorphBG4").opacity(0.4)
-                    .frame(width: 30, height: 30)
-                    .cornerRadius(5)
-            )
+         
             
             Spacer()
-                .frame(width: 200)
+                .frame(width: 180)
             
-            Button("Move Exercise") {
-                print("DEBUG: 'Move Exercise' tapped for \(exercise.name)")
-                onRequestMove?(exercise)
-            }
-            .padding(.top, 8)
+   
             
             Button {
                 showDeleteConfirmation = true
             } label: {
                 Image(systemName: "trash")
-                    .foregroundColor(.red)
+                    .font(.system(size: 25))
+                    .foregroundColor(.red).opacity(0.8)
+                    .padding(8)
+                    .background(Color.black.opacity(0.3))
+                    .clipShape(Circle())
             }
             .buttonStyle(.borderless)
             .foregroundColor(.red)
@@ -852,23 +868,49 @@ struct ExerciseCardView: View {
     }
     
     private func EditModeContent() -> some View {
-        VStack(alignment: .center, spacing: 50) {
+        VStack(alignment: .center, spacing: 20) {
             // Edit the exercise name
             ExerciseNameField(exercise: exercise, evm: evm)
-            
-            // Edit the number of sets
-            SetsField(exercise: exercise, evm: evm)
-            
-            // Edit the reps
-            RepsField(exercise: exercise, evm: evm)
-            
-            // Done Editing button
-            Button("Done Editing") {
-                finishEditing()
+            HStack(spacing: 20) {
+                // Edit the number of sets
+                SetsField(exercise: exercise, evm: evm)
+                Text("x")
+                    .font(.system(size: 34, weight: .medium, design: .default))
+                    .padding(.top, 20)
+                    .foregroundColor(.white).opacity(0.8)
+
+                // Edit the reps
+                RepsField(exercise: exercise, evm: evm)
             }
+            
+            Spacer()
+                .frame(height: 10)
+            Button(action: { print("DEBUG: 'Move Exercise' tapped for \(exercise.name)")
+                onRequestMove?(exercise)}) {
+                    Text("Move Exercise")
+                        .font(.system(size: 18, weight: .semibold, design: .default))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: 200, minHeight: 50)
+                        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+                .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
+            
+       
+            // Done Editing button
+            Button(action: {  finishEditing()}) {
+              
+                Text("Done Editing")
+                    .font(.system(size: 12, weight: .semibold, design: .default))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: 150, minHeight: 30)
+                    .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+            .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
+
             .buttonStyle(.borderless)
             .foregroundColor(.white.opacity(0.8))
         }
+        .offset(x: 0, y: -20)
     }
     
     // MARK: - View Mode View
@@ -929,6 +971,7 @@ struct ExerciseCardView: View {
                 SetRowView(exercise: exercise, index: index, evm: evm)
             }
         }
+        .offset(x: 6)
     }
     
     private func ViewModeNameOverlay() -> some View {
@@ -1128,7 +1171,7 @@ extension View {
 //    @Environment(\.presentationMode) var presentationMode
 //    let evm: ExerciseViewModel
 //    let exercise: Exercise
-//    
+//
 //    // Define 8 distinct color options
 //    let colorOptions: [(name: String, color: Color)] = [
 //        ("Blue", Color.blue),
@@ -1146,7 +1189,7 @@ extension View {
 //            Text("Choose an accent color")
 //                .font(.headline)
 //                .padding(.top)
-//            
+//
 //            LazyVGrid(columns: [GridItem(.adaptive(minimum: 70))], spacing: 15) {
 //                ForEach(colorOptions, id: \.name) { option in
 //                    ColorOption(
@@ -1160,18 +1203,18 @@ extension View {
 //                }
 //            }
 //            .padding()
-//            
+//
 //            Spacer()
-//            
+//
 //            HStack {
 //                Button("Cancel") {
 //                    presentationMode.wrappedValue.dismiss()
 //                }
 //                .padding()
 //                .foregroundColor(.gray)
-//                
+//
 //                Spacer()
-//                
+//
 //                Button("Done") {
 //                    if let newHex = accentColor.toHex(), let recordID = exercise.recordID {
 //                        evm.updateExercise(recordID: recordID, newAccentColor: newHex)
@@ -1638,7 +1681,78 @@ class ZeroDefaultNumberFormatter: NumberFormatter {
         }
     }
 }
+#if DEBUG
 
+import SwiftUI
+import CloudKit
+
+// MARK: – Dummy Models for Preview
+extension Exercise {
+    static let dummy = Exercise(
+        recordID: nil,
+        name: "Push‑Ups",
+        sets: 3,
+        reps: 12,
+        setWeights: [0.0, 0.0, 0.0],
+        setCompletions: [false, false, false],
+        setNotes: ["", "", ""],
+        exerciseNote: "Keep your back straight.",
+        setActualReps: [12, 10, 8],
+        timestamp: Date(),
+        accentColorHex: "#0000FF",
+        sortIndex: 0,
+        tempID: nil
+    )
+}
+
+final class DummyEVM: ExerciseViewModel {
+    init() {
+        super.init(workoutID: CKRecord.ID(recordName: "PreviewWorkout"))
+        // if your real EVM needs setup, you can stub it here
+    }
+}
+
+// MARK: – Preview
+#Preview {
+    NavigationView {
+        ZStack {
+            // Background gradient.
+            LinearGradient(
+                gradient: Gradient(colors: [Color("NeomorphBG2"), Color("NeomorphBG2")]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: 16) {
+                    ExerciseCardView(
+                        exercise: .dummy,
+                        evm: DummyEVM(),
+                        onRequestMove: { exercise in
+                            // simulate “move” tap
+                            print("🕹️ moving \(exercise.name)")
+                        }
+                    )
+                    .padding()
+                    
+                    // you can preview multiple sizes/colors
+                    ExerciseCardView(
+                        exercise: .dummy,
+                        evm: DummyEVM(),
+                        rectangleProgress: 0.8,
+                        cornerRadius: 20,
+                        cardWidth: 350,
+                        onRequestMove: nil
+                    )
+                    .padding()
+                }
+                .navigationTitle("Exercises (Preview)")
+            }
+        }
+    }
+}
+#endif
 
 #Preview {
     NavigationView {
