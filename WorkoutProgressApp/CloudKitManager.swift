@@ -363,7 +363,3 @@ class CloudKitManager: ObservableObject {
     
 }
 
-extension CloudKitManager {
-
-
-}
