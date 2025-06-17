@@ -837,4 +837,6 @@ extension Color {
 
 #Preview {
     ContentView()
+        .environmentObject(WorkoutViewModel())
+        .environmentObject(WorkoutBlockManager.withSampleData())
 }
