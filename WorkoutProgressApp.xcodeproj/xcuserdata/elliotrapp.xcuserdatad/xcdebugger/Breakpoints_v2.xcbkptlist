@@ -14,12 +14,18 @@
             filePath = "WorkoutProgressApp/WorkoutView.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
+<<<<<<< HEAD
             startingLineNumber = "988"
             endingLineNumber = "988"
+=======
+            startingLineNumber = "920"
+            endingLineNumber = "920"
+>>>>>>> fix-missing-environmentobject-injection
             landmarkName = "unknown"
             landmarkType = "0">
          </BreakpointContent>
       </BreakpointProxy>
+<<<<<<< HEAD
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
@@ -52,5 +58,7 @@
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
+=======
+>>>>>>> fix-missing-environmentobject-injection
    </Breakpoints>
 </Bucket>
