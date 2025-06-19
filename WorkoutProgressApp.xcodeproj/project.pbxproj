@@ -409,7 +409,6 @@
 				CODE_SIGN_ENTITLEMENTS = WorkoutProgressApp/WorkoutProgressApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_ASSET_PATHS = "\"WorkoutProgressApp/Preview Content\"";
 				DEVELOPMENT_TEAM = SDVM3QJL8X;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -447,7 +446,6 @@
 				CODE_SIGN_ENTITLEMENTS = WorkoutProgressApp/WorkoutProgressApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_ASSET_PATHS = "\"WorkoutProgressApp/Preview Content\"";
 				DEVELOPMENT_TEAM = SDVM3QJL8X;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
