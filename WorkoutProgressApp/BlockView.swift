@@ -185,6 +185,9 @@ struct BlockCardView: View {
     
     /// State to control sheet presentation
     @State private var showReorderSheet = false
+
+    /// Temporary title used when renaming a block
+    @State private var editedTitle: String = ""
     
     /// A pre-calculated rotation angle if you still want the 3D effect in a TabView.
     let rotationAngle: Double
@@ -201,34 +204,48 @@ struct BlockCardView: View {
     var body: some View {
         ZStack {
             if isEditing {
-                     // In editing mode, the entire card displays buttons
-                     BlockCustomRoundedRectangle()
-                         .overlay(
-                             VStack(spacing: 16) {
-                                 Button(action: {
-                                     withAnimation {
-                                         blockManager.deleteBlock(block: block)
-                                         isEditing = false
-                                     }
-                                 }) {
-                                     Text("Delete Block")
-                                         .font(.headline)
-                                         .foregroundColor(.white)
-                                         .padding()
-                                 }
-                                 
-                                 Button(action: {
-                                     showReorderSheet = true
-                                     isEditing = false // Close editing mode when moving
-                                 }) {
-                                     Text("Reorder Blocks")
-                                         .font(.headline)
-                                         .foregroundColor(.white)
-                                         .padding()
-                                 }
-                             }
-                         )
-                 } else {
+                // In editing mode, the entire card displays controls
+                BlockCustomRoundedRectangle()
+                    .overlay(
+                        VStack(spacing: 16) {
+                            TextField("Block Name", text: $editedTitle)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .padding(.horizontal)
+
+                            Button("Save Name") {
+                                let newName = editedTitle.trimmingCharacters(in: .whitespaces)
+                                guard !newName.isEmpty else { return }
+                                blockManager.updateBlock(block: block, newTitle: newName)
+                                isEditing = false
+                            }
+                            .disabled(editedTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .padding(.bottom, 8)
+
+                            Button(action: {
+                                withAnimation {
+                                    blockManager.deleteBlock(block: block)
+                                    isEditing = false
+                                }
+                            }) {
+                                Text("Delete Block")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .padding()
+                            }
+
+                            Button(action: {
+                                showReorderSheet = true
+                                isEditing = false // Close editing mode when moving
+                            }) {
+                                Text("Reorder Blocks")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .padding()
+                            }
+                        }
+                    )
+                    .onAppear { editedTitle = block.title }
+            } else {
                 
                 // If NOT editing, the entire card is a NavigationLink.
                 NavigationLink(
