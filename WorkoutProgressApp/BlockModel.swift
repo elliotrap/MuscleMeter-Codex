@@ -10,10 +10,15 @@ import SwiftUI
 
 // MARK: - WorkoutBlock Model
 
-struct WorkoutBlock: Identifiable {
+struct WorkoutBlock: Identifiable, Equatable {
     var blockID: CKRecord.ID?
     var title: String
     var order: Int // Property to track block order
+    var accentColorHex: String = "#1E88E5"
+
+    var accentColor: Color {
+        Color(hex: accentColorHex)
+    }
     
     // Conform to Identifiable with a String ID that is guaranteed to be unique
     var id: String {
@@ -29,11 +34,13 @@ struct WorkoutBlock: Identifiable {
         self.blockID = record.recordID
         self.title = record["title"] as? String ?? ""
         self.order = record["order"] as? Int ?? 0
+        self.accentColorHex = record["accentColorHex"] as? String ?? "#1E88E5"
     }
-    
+
     init(title: String, order: Int = 0) {
         self.title = title
         self.order = order
+        self.accentColorHex = "#1E88E5"
     }
     
     func toCKRecord() -> CKRecord {
@@ -45,6 +52,7 @@ struct WorkoutBlock: Identifiable {
         }
         record["title"] = title as CKRecordValue
         record["order"] = order as CKRecordValue
+        record["accentColorHex"] = accentColorHex as CKRecordValue
         return record
     }
 }
@@ -191,7 +199,7 @@ class WorkoutBlockManager: ObservableObject {
     }
 
     // Update an existing block
-    func updateBlock(block: WorkoutBlock, newTitle: String) {
+    func updateBlock(block: WorkoutBlock, newTitle: String? = nil, newColor: String? = nil) {
         // Use blockID (the CKRecord.ID) instead of id (the String)
         guard let recordID = block.blockID else {
             print("Error: Block has no record ID.")
@@ -205,7 +213,12 @@ class WorkoutBlockManager: ObservableObject {
             }
             
             if let fetchedRecord = fetchedRecord {
-                fetchedRecord["title"] = newTitle as CKRecordValue
+                if let newTitle = newTitle {
+                    fetchedRecord["title"] = newTitle as CKRecordValue
+                }
+                if let newColor = newColor {
+                    fetchedRecord["accentColorHex"] = newColor as CKRecordValue
+                }
                 self.privateDB.save(fetchedRecord) { updatedRecord, error in
                     if let error = error {
                         print("Error updating block: \(error.localizedDescription)")
@@ -219,7 +232,7 @@ class WorkoutBlockManager: ObservableObject {
                             if let index = self.blocks.firstIndex(where: { $0.id == block.id }) {
                                 self.blocks[index] = updatedBlock
                             }
-                            print("Successfully updated block. New title: \(updatedBlock.title)")
+                            print("Successfully updated block. New title: \(updatedBlock.title), New color: \(updatedBlock.accentColorHex)")
                         }
                     } else {
                         print("Error: No record returned after updating block.")
