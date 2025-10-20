@@ -185,6 +185,13 @@ struct BlockCardView: View {
     
     /// State to control sheet presentation
     @State private var showReorderSheet = false
+
+    /// Temporary title used when renaming a block
+    @State private var editedTitle: String = ""
+
+    /// Color picker state
+    @State private var showColorPicker = false
+    @State private var selectedColor: Color = .blue
     
     /// A pre-calculated rotation angle if you still want the 3D effect in a TabView.
     let rotationAngle: Double
@@ -201,40 +208,108 @@ struct BlockCardView: View {
     var body: some View {
         ZStack {
             if isEditing {
-                     // In editing mode, the entire card displays buttons
-                     BlockCustomRoundedRectangle()
-                         .overlay(
-                             VStack(spacing: 16) {
-                                 Button(action: {
-                                     withAnimation {
-                                         blockManager.deleteBlock(block: block)
-                                         isEditing = false
-                                     }
-                                 }) {
-                                     Text("Delete Block")
-                                         .font(.headline)
-                                         .foregroundColor(.white)
-                                         .padding()
-                                 }
-                                 
-                                 Button(action: {
-                                     showReorderSheet = true
-                                     isEditing = false // Close editing mode when moving
-                                 }) {
-                                     Text("Reorder Blocks")
-                                         .font(.headline)
-                                         .foregroundColor(.white)
-                                         .padding()
-                                 }
-                             }
-                         )
-                 } else {
+                // In editing mode, the entire card displays controls
+                BlockCustomRoundedRectangle(accentColor: block.accentColor)
+                    .overlay(
+                        VStack {
+                            HStack(spacing: 55) {
+                                Button(action: {
+                                    withAnimation { isEditing.toggle() }
+                                }) {
+                                    Image(systemName: "arrow.left")
+                                        .font(.system(size: 24, weight: .bold))
+                                        .frame(width: 44, height: 44)
+                                        .background(Color.black.opacity(0.22))
+                                        .foregroundColor(.white)
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle().stroke(Color.white.opacity(0.2), lineWidth: 1.2)
+                                        )
+                                }
+                                .buttonStyle(.borderless)
+
+                                Button(action: {
+                                    selectedColor = block.accentColor
+                                    showColorPicker = true
+                                }) {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 24, weight: .bold))
+                                        .frame(width: 44, height: 44)
+                                        .background(Color.black.opacity(0.22))
+                                        .foregroundColor(.white)
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle().stroke(Color.white.opacity(0.2), lineWidth: 1.2)
+                                        )
+                                }
+                                .buttonStyle(.borderless)
+
+                                Button(action: {
+                                    blockManager.deleteBlock(block: block)
+                                    isEditing = false
+                                }) {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 24, weight: .bold))
+                                        .frame(width: 44, height: 44)
+                                        .background(Color.black.opacity(0.22))
+                                        .foregroundColor(.red)
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle().stroke(Color.red.opacity(0.25), lineWidth: 2)
+                                        )
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                            .padding([.top, .horizontal], 0)
+
+                            TextField("Block Name", text: $editedTitle)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .padding()
+
+                            Button("Save Name") {
+                                let newName = editedTitle.trimmingCharacters(in: .whitespaces)
+                                guard !newName.isEmpty else { return }
+                                var newColorHex: String? = nil
+                                if let newHex = selectedColor.toHex(), newHex != block.accentColorHex {
+                                    newColorHex = newHex
+                                }
+                                blockManager.updateBlock(block: block, newTitle: newName, newColor: newColorHex)
+                                isEditing = false
+                            }
+                            .disabled(editedTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .padding(.bottom, 8)
+
+                            Spacer().frame(height: 130)
+
+                            Button(action: {
+                                showReorderSheet = true
+                                isEditing = false
+                            }) {
+                                Text("Reorder Blocks")
+                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 11)
+                                    .frame(maxWidth: 180)
+                            }
+                            .buttonStyle(NeumorphicButtonStyle(accent: Color("NeomorphBG5")))
+                            .padding(.bottom, 28)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black.opacity(0.001))
+                    , alignment: .top
+                    )
+                    .onAppear {
+                        editedTitle = block.title
+                        selectedColor = block.accentColor
+                    }
+            } else {
                 
                 // If NOT editing, the entire card is a NavigationLink.
                 NavigationLink(
                     destination: BlockWorkoutsListView(blockTitle: block.title)
                 ) {
-                    BlockCustomRoundedRectangle()
+                    BlockCustomRoundedRectangle(accentColor: block.accentColor)
                         .overlay(
                             ZStack {
                                 Text(block.title)
@@ -296,6 +371,20 @@ struct BlockCardView: View {
                 // Navigate to block detail
                 // Your existing navigation code
             }
+        }
+        .sheet(isPresented: $showColorPicker) {
+            VStack {
+                ColorPicker("Accent Color", selection: $selectedColor, supportsOpacity: false)
+                    .padding()
+                Button("Save") {
+                    if let newHex = selectedColor.toHex() {
+                        blockManager.updateBlock(block: block, newColor: newHex)
+                    }
+                    showColorPicker = false
+                }
+                .padding()
+            }
+            .presentationDetents([.fraction(0.3)])
         }
         .sheet(isPresented: $showReorderSheet) {
             BlockReorderSheet(blockManager: blockManager, isPresented: $showReorderSheet)
